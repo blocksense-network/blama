@@ -25,7 +25,9 @@ set(ICM_DEV_CXX_STANDARD 20)
 
 include(icm_dev_mode)
 include(icm_add_lib)
+include(icm_build_failure_testing)
 include(bl_dep)
+include(bl_lib_subdirs)
 
 #######################################
 # options
@@ -38,32 +40,33 @@ option(BLAMA_BUILD_BENCH "${PROJECT_NAME}: build benchmarks" ${ICM_DEV_MODE})
 option(BLAMA_BUILD_SANDBOX "${PROJECT_NAME}: build sandbox project (dev experiments)" ${ICM_DEV_MODE})
 mark_as_advanced(BLAMA_BUILD_SANDBOX)
 
+
 #######################################
-# setup llama.cpp
+# global packages
 
-find_package(CUDAToolkit)
-if(CUDAToolkit_FOUND)
-    set(haveCuda YES)
-    enable_language(CUDA)
-    set(CMAKE_CUDA_ARCHITECTURES 70)
-    message(STATUS "${CMAKE_PROJECT_NAME}: system CUDA found")
-    # we should add -forward-unknown-to-host-compiler but it somehow works without it
-    # could it be that it depends on the CMake version?
+if(BLAMA_BUILD_TESTS)
+    if(NOT TARGET doctest::util)
+        CPMAddPackage(gh:iboB/doctest-util@0.1.3)
+        set_target_properties(doctest PROPERTIES FOLDER test)
+        set_target_properties(doctest-main PROPERTIES FOLDER test)
+    endif()
+    enable_testing()
 endif()
 
-if(haveCuda)
-    set(GGML_CUDA ON)
+if(BLAMA_BUILD_TESTS OR BLAMA_BUILD_EXAMPLES)
+    CPMAddPackage(
+        NAME ac-test-data-llama
+        VERSION 1.0.0
+        GIT_REPOSITORY https://huggingface.co/alpaca-core/ac-test-data-llama
+        GIT_TAG 164e484873785c804fe724f88bdb96088b573ebc
+    )
 endif()
-
-set(GGML_CCACHE OFF)
-
-set(LLAMA_BUILD_COMMON OFF)
-
-CPMAddPackage("gh:ggml-org/llama.cpp#b5177")
 
 #######################################
 # code
-#~ add_subdirectory(code)
+add_subdirectory(common)
+
+add_subdirectory(inference)
 
 #~ if(BLAMA_BUILD_TESTS)
 #~     enable_testing()
