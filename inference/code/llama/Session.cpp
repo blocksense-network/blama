@@ -161,7 +161,7 @@ void Session::pushPrompt(std::span<const Token> prompt, std::span<const Token> p
     doDecode(tokens, Source::InteractivePrompt);
 }
 
-Token Session::getToken() {
+TokenPrediction Session::getToken() {
     if (m_state.m_phase != State::Phase::Generating) {
         throw_ex{} << "Session hasn't started yet";
     }
@@ -178,10 +178,32 @@ Token Session::getToken() {
         m_state.m_currToken = Token_Invalid;
     }
 
-    return m_state.m_currToken;
+    return {
+        .token = m_state.m_currToken,
+        .logits = getLogitsFromCtx(10)
+    };
 }
 
-TokenDataVector Session::getSampledTokenData(int32_t topK) {
+std::vector<TokenPrediction> Session::fillCtx(std::span<TokenPrediction> tokens) {
+    std::vector<TokenPrediction> result;
+    result.reserve(tokens.size());
+
+    for (const auto& token : tokens) {
+        pushPrompt({&token.token, 1}, {});
+        result.push_back({
+            .token = token.token,
+            .logits = getLogitsFromCtx(10)
+        });
+    }
+
+    return result;
+}
+
+TokenDataVector Session::getLogitsFromCtx(int32_t topK) {
+    if (m_state.m_phase != State::Phase::Generating) {
+        throw_ex{} << "Session hasn't started yet";
+    }
+
     flushPendingState();
 
     TokenDataVector tempData = fillLogits(m_ctx);
@@ -190,10 +212,7 @@ TokenDataVector Session::getSampledTokenData(int32_t topK) {
         return a.logit > b.logit;
     });
 
-    TokenDataVector result;
-    result.insert(result.end(), tempData.begin(), tempData.begin() + topK);
-
-    return result;
+    return TokenDataVector(tempData.begin(), tempData.begin() + topK);
 }
 
 std::vector<uint8_t> Session::getState() {

@@ -13,3 +13,4 @@ function(add_llama_example name)
 endfunction()
 
 add_llama_example(basic)
+add_llama_example(verify)

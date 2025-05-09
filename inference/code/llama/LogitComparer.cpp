@@ -30,41 +30,45 @@ std::unordered_map<int32_t, float> softmax(const bl::llama::TokenDataVector& dat
 
 namespace bl::llama {
 
-// We apply 3 step comparison
-// 1. Compare the euclidean distance of the logits
-//  - If the distance is less than 2% of the max distance, we consider them equal
-// 2. Compare the matching tokens
-//  - If at least 80% of the tokens are the same, we consider them equal
+// Generate 4 step comparison
+// 1. Compare the top1 token
+// 2. Compare the euclidean distance of the logits
+//  - If the distance is ≤ 2% of the max distance, we can consider them equal
 // 3. Compare the Jensen-Shannon divergence of the probabilities
-//  - If the divergence is less than the treshold, we consider them equal
-bool LogitComparer::compare(const TokenDataVector& data1, const TokenDataVector& data2) {
+//  - If the divergence is ≤ 0.05, we can consider them equal
+// 4. Compare the Jaccard index of the probabilities
+//  - If at ≥ 80% of the tokens are the same, we can consider them equal
+LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& data1, const TokenDataVector& data2) {
+    ComparisonMetrics metrics;
+    if (data1[0].token == data2[0].token) {
+        metrics.top1Match = 1.0f;
+    }
+
     const auto minSize = std::min(data1.size(), data2.size());
     float distance1 = euclidean_distance_sq({data1.data(), minSize});
     float distance2 = euclidean_distance_sq({data2.data(), minSize});
 
-    float relative_threshold = 0.02f; // 2% difference allowed
-    float res = std::fabs(distance1 - distance2) / std::max(distance1, distance2);
-    if (res > relative_threshold) {
-        return false;
-    }
+    metrics.distance = std::fabs(distance1 - distance2) / std::max(distance1, distance2);
 
     auto prob_map = softmax(data1);
     auto prob_map2 = softmax(data2);
 
-    // Check if at least 80% of the tokens are the same
-    float matchingTokens = 0;
-    for (const auto& p : data1) {
-        if (prob_map2.count(p.token)) {
-            matchingTokens++;
-        }
-    }
+    metrics.jsd = jsd(prob_map, prob_map2);
+    metrics.jaccardIndex = jaccardIndex(prob_map, prob_map2);
 
-    float matchingPercentage = matchingTokens / minSize;
-    if (matchingPercentage < 0.8f) {
-        return false;
-    }
+    return metrics;
+}
 
-    return jsd(prob_map, prob_map2) < 0.01;
+// Final score is a weighted sum of the metrics.
+// if the final score is ≥ 0.95 we can consider them equal
+float LogitComparer::comparisonFinalScore(std::span<ComparisonMetrics> metrics) {
+    float total = 0.0f;
+    for (auto& m : metrics) {
+        total += 0.5 * m.top1Match +
+                 0.3 * (1.0f - m.jsd) +
+                 0.2 * m.jaccardIndex;
+    }
+    return total / metrics.size();
 }
 
 float LogitComparer::logitSimilarity(const TokenDataVector& data1, const TokenDataVector& data2) {
@@ -76,10 +80,10 @@ float LogitComparer::logitSimilarity(const TokenDataVector& data1, const TokenDa
     float weightedSimSum = 0.0f;
     float totalWeight = 0.0f;
     for (auto& t : data1) {
-        float weight = t.logit;
+        float weight = std::abs(t.logit);
         float sim = 0.0f;
         if (l2_map.count(t.token)) {
-            sim = 1 - (std::abs(t.logit - l2_map[t.token]) / std::max(t.logit, l2_map[t.token]));
+            sim = 1 - (std::abs(t.logit - l2_map[t.token]) / std::abs(std::max(t.logit, l2_map[t.token])));
         }
 
         weightedSimSum += weight * sim;
@@ -111,6 +115,17 @@ float LogitComparer::jsd(const std::unordered_map<Token, float>& probs1, const s
     auto div2 = kl_divergence(probs2, avg_dist);
 
     return (div1 + div2) / 2.0f;
+}
+
+float LogitComparer::jaccardIndex(const std::unordered_map<Token, float>& logits1, const std::unordered_map<Token, float>& logits2) {
+    size_t intersection = 0;
+    for (auto& [token, _] : logits1) {
+        if (logits2.count(token)) {
+            intersection++;
+        }
+    }
+    size_t union_size = logits1.size() + logits2.size() - intersection;
+    return union_size ? (float)intersection / union_size : 1.0f;
 }
 
 float LogitComparer::euclidean_distance_sq(std::span<const TokenData> tokens) {

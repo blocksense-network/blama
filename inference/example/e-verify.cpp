@@ -9,7 +9,7 @@
 #include <llama/Model.hpp>
 #include <llama/Instance.hpp>
 #include <llama/Session.hpp>
-#include <llama/ControlVector.hpp>
+#include <llama/LogitComparer.hpp>
 
 // logging
 #include <jalog/Instance.hpp>
@@ -29,8 +29,9 @@ int main() try {
     bl::llama::initLibrary();
 
     // load model
-    std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-    std::string ctrlVectorGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6-control_vector.gguf";
+    // std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    std::string tmpFolder = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/";
+    std::string modelGguf = tmpFolder + "Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
     auto modelLoadProgressCallback = [](float progress) {
         const int barWidth = 50;
         static float currProgress = 0;
@@ -50,10 +51,6 @@ int main() try {
     // create inference instance
     bl::llama::Instance instance(model, {});
 
-    // To add control vector uncomment the following lines
-    // bl::llama::ControlVector ctrlVector(model, {{ctrlVectorGguf, 2.f}});
-    // instance.addControlVector(ctrlVector);
-
     std::string prompt = "The first person to";
     std::cout << "Prompt: " << prompt << "\n";
 
@@ -61,15 +58,44 @@ int main() try {
     auto& session = instance.startSession({});
     session.setInitialPrompt(model.vocab().tokenize(prompt, true, true));
 
-    // generate and print 100 tokens
-    for (int i = 0; i < 100; ++i) {
+    std::vector<bl::llama::TokenPrediction> iRes;
+
+    constexpr int maxTokens = 20;
+    for (int i = 0; i < maxTokens; ++i) {
         auto pred = session.getToken();
         if (pred.token == bl::llama::Token_Invalid) {
             // no more tokens
             break;
         }
+        iRes.push_back(pred);
         std::cout << model.vocab().tokenToString(pred.token);
     }
+
+    bl::llama::Model modelCpu(modelGguf, {
+        .gpu = false
+    }, modelLoadProgressCallback);
+
+    bl::llama::Instance instanceCpu(modelCpu, {});
+    auto& sessionCpu = instanceCpu.startSession({});
+    sessionCpu.setInitialPrompt(modelCpu.vocab().tokenize(prompt, true, true));
+    auto iRes2 = sessionCpu.fillCtx(iRes);
+
+    std::vector<bl::llama::LogitComparer::ComparisonMetrics> metrics(iRes.size());
+    float sumSim = 0;
+    for (size_t i = 0; i < iRes.size(); i++) {
+        float sim = bl::llama::LogitComparer::logitSimilarity(iRes[i].logits, iRes2[i].logits);
+        auto m = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+        std::cout   << "Token: '" << model.vocab().tokenToString(iRes[i].token) << "' - "
+                    << " Logits: " << iRes[i].logits[0].logit << " Logits2: " << iRes2[i].logits[0].logit
+                    << " Sim: " << sim
+                    << "\n";
+
+        metrics.push_back(m);
+        sumSim += sim;
+    }
+
+    std::cout << "\n\nAverage similarity: " << sumSim / iRes.size() << "\n";
+    std::cout << "Final metrics score: " << bl::llama::LogitComparer::comparisonFinalScore(metrics) << "\n";
     std::cout << '\n';
 
     return 0;

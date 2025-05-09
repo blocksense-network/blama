@@ -16,6 +16,11 @@ struct llama_context;
 namespace bl::llama {
 class Instance;
 
+struct TokenPrediction {
+    Token token;
+    TokenDataVector logits;
+};
+
 class BL_LLAMA_API Session {
 public:
     struct InitParams {
@@ -37,8 +42,8 @@ public:
 
     // main functions to interact with the model
     void pushPrompt(std::span<const Token> prompt, std::span<const Token> postfix = {});
-    Token getToken();
-    TokenDataVector getSampledTokenData(int32_t topK);
+    TokenPrediction getToken();
+    std::vector<TokenPrediction> fillCtx(std::span<TokenPrediction> tokens);
     std::vector<uint8_t> getState();
 private:
     enum class Source {
@@ -49,6 +54,7 @@ private:
 
     void doDecode(std::span<const Token> tokens, Source src);
     void flushPendingState();
+    TokenDataVector getLogitsFromCtx(int32_t topK);
 
     struct State {
         enum class Phase {
