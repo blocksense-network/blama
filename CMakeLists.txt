@@ -40,7 +40,6 @@ option(BLAMA_BUILD_BENCH "${PROJECT_NAME}: build benchmarks" ${ICM_DEV_MODE})
 option(BLAMA_BUILD_SANDBOX "${PROJECT_NAME}: build sandbox project (dev experiments)" ${ICM_DEV_MODE})
 mark_as_advanced(BLAMA_BUILD_SANDBOX)
 
-
 #######################################
 # global packages
 
@@ -68,18 +67,7 @@ add_subdirectory(common)
 
 add_subdirectory(inference)
 
-#~ if(BLAMA_BUILD_TESTS)
-#~     enable_testing()
-#~     add_subdirectory(test)
-#~ endif()
-
-#~ if(BLAMA_BUILD_BENCH)
-#~     add_subdirectory(bench)
-#~ endif()
-
-#~ if(BLAMA_BUILD_EXAMPLES)
-#~     add_subdirectory(example)
-#~ endif()
+add_subdirectory(server)
 
 if(BLAMA_BUILD_SANDBOX)
     add_subdirectory(sandbox)
