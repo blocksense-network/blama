@@ -62,13 +62,13 @@ LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& d
 // Final score is a weighted sum of the metrics.
 // if the final score is ≥ 0.95 we can consider them equal
 float LogitComparer::comparisonFinalScore(std::span<ComparisonMetrics> metrics) {
-    float total = 0.0f;
+    double total = 0.0f;
     for (auto& m : metrics) {
         total += 0.5 * m.top1Match +
                  0.3 * (1.0f - m.jsd) +
                  0.2 * m.jaccardIndex;
     }
-    return total / metrics.size();
+    return float(total / metrics.size());
 }
 
 float LogitComparer::logitSimilarity(const TokenDataVector& data1, const TokenDataVector& data2) {

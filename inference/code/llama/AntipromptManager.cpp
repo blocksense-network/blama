@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 #include "AntipromptManager.hpp"
+#include <algorithm>
 
 namespace bl::llama {
 
