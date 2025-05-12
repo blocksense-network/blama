@@ -55,6 +55,7 @@ private:
     void doDecode(std::span<const Token> tokens, Source src);
     void flushPendingState();
     TokenDataVector getLogitsFromCtx(int32_t topK);
+    TokenDataVector getLogitsFromCtx(TokenDataVector tokens);
 
     struct State {
         enum class Phase {

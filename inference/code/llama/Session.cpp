@@ -20,15 +20,19 @@ llama_batch makeInputBatch(std::span<const Token> tokens) {
     return llama_batch_get_one(nonConstTokens, int32_t(tokens.size()));
 }
 
-TokenDataVector fillLogits(llama_context* lctx) {
+TokenDataVector fillLogits(llama_context* lctx, std::function<bool(llama_token)> pred = nullptr) {
     const auto* logits = llama_get_logits_ith(lctx, -1);
 
     const auto* lmodel = llama_get_model(lctx);
     const int vocabSize = llama_vocab_n_tokens(llama_model_get_vocab(lmodel));
 
-    TokenDataVector result(vocabSize);
+    TokenDataVector result;
+    result.reserve(pred ? vocabSize : 0);
     for (llama_token id = 0; id < vocabSize; id++) {
-        result[id] = {id, logits[id]};
+        if (pred && !pred(id)) {
+            continue;
+        }
+        result.push_back({id, logits[id]});
     }
 
     return result;
@@ -192,7 +196,7 @@ std::vector<TokenPrediction> Session::fillCtx(std::span<TokenPrediction> tokens)
         pushPrompt({&token.token, 1}, {});
         result.push_back({
             .token = token.token,
-            .logits = getLogitsFromCtx(10)
+            .logits = getLogitsFromCtx(token.logits)
         });
     }
 
@@ -213,6 +217,26 @@ TokenDataVector Session::getLogitsFromCtx(int32_t topK) {
     });
 
     return TokenDataVector(tempData.begin(), tempData.begin() + topK);
+}
+
+TokenDataVector Session::getLogitsFromCtx(TokenDataVector tokens) {
+    if (m_state.m_phase != State::Phase::Generating) {
+        throw_ex{} << "Session hasn't started yet";
+    }
+
+    flushPendingState();
+
+    TokenDataVector res = fillLogits(m_ctx, [&](llama_token token) {
+        return std::any_of(tokens.begin(), tokens.end(), [&](const TokenData& t) {
+            return t.token == token;
+        });
+    });
+
+    std::sort(res.begin(), res.end(), [](const TokenData & a, const TokenData & b) {
+        return a.logit > b.logit;
+    });
+
+    return res;
 }
 
 std::vector<uint8_t> Session::getState() {
