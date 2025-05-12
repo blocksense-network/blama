@@ -29,9 +29,7 @@ int main() try {
     bl::llama::initLibrary();
 
     // load model
-    // std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-    std::string tmpFolder = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/";
-    std::string modelGguf = tmpFolder + "Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
+    std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
     auto modelLoadProgressCallback = [](float progress) {
         const int barWidth = 50;
         static float currProgress = 0;
