@@ -15,7 +15,6 @@ public:
         float top1Match;
         float distance;
         float jsd;
-        float jaccardIndex;
     };
     static ComparisonMetrics compare(const TokenDataVector& data1, const TokenDataVector& data2);
     static float comparisonFinalScore(std::span<ComparisonMetrics> metrics);
@@ -23,7 +22,6 @@ public:
 
 private:
     static float jsd(const std::unordered_map<Token, float>& logits1, const std::unordered_map<Token, float>& logits2);
-    static float jaccardIndex(const std::unordered_map<Token, float>& logits1, const std::unordered_map<Token, float>& logits2);
     static float euclidean_distance_sq(std::span<const TokenData> tokens);
 };
 }

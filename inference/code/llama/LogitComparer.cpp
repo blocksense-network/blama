@@ -40,9 +40,7 @@ namespace bl::llama {
 //  - If at ≥ 80% of the tokens are the same, we can consider them equal
 LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& data1, const TokenDataVector& data2) {
     ComparisonMetrics metrics;
-    if (data1[0].token == data2[0].token) {
-        metrics.top1Match = 1.0f;
-    }
+    metrics.top1Match = data1[0].token == data2[0].token ? 1.0f : 0.0f;
 
     const auto minSize = std::min(data1.size(), data2.size());
     float distance1 = euclidean_distance_sq({data1.data(), minSize});
@@ -54,7 +52,6 @@ LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& d
     auto prob_map2 = softmax(data2);
 
     metrics.jsd = jsd(prob_map, prob_map2);
-    metrics.jaccardIndex = jaccardIndex(prob_map, prob_map2);
 
     return metrics;
 }
@@ -64,9 +61,9 @@ LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& d
 float LogitComparer::comparisonFinalScore(std::span<ComparisonMetrics> metrics) {
     double total = 0.0f;
     for (auto& m : metrics) {
-        total += 0.5 * m.top1Match +
-                 0.3 * (1.0f - m.jsd) +
-                 0.2 * m.jaccardIndex;
+        total +=
+            0.5 * (1.0f - m.distance) +
+            0.5 * (1.0f - m.jsd);
     }
     return float(total / metrics.size());
 }
@@ -76,6 +73,9 @@ float LogitComparer::logitSimilarity(const TokenDataVector& data1, const TokenDa
 
     for (const auto& t : data1) l_map[t.token] = t.logit;
     for (const auto& t : data2) l2_map[t.token] = t.logit;
+
+    auto prob1 = softmax(data1);
+    auto prob2 = softmax(data2);
 
     float weightedSimSum = 0.0f;
     float totalWeight = 0.0f;
@@ -115,17 +115,6 @@ float LogitComparer::jsd(const std::unordered_map<Token, float>& probs1, const s
     auto div2 = kl_divergence(probs2, avg_dist);
 
     return (div1 + div2) / 2.0f;
-}
-
-float LogitComparer::jaccardIndex(const std::unordered_map<Token, float>& logits1, const std::unordered_map<Token, float>& logits2) {
-    size_t intersection = 0;
-    for (auto& [token, _] : logits1) {
-        if (logits2.count(token)) {
-            intersection++;
-        }
-    }
-    size_t union_size = logits1.size() + logits2.size() - intersection;
-    return union_size ? (float)intersection / union_size : 1.0f;
 }
 
 float LogitComparer::euclidean_distance_sq(std::span<const TokenData> tokens) {
