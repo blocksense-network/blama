@@ -84,13 +84,11 @@ int main() try {
     float sumSim = 0;
     for (size_t i = 0; i < iRes.size(); i++) {
         float sim = bl::llama::LogitComparer::logitSimilarity(iRes[i].logits, iRes2[i].logits);
-        auto m = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+        metrics[i] = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
         std::cout   << "Token: '" << model.vocab().tokenToString(iRes[i].token) << "' - "
                     << " Logits: " << iRes[i].logits[0].logit << " Logits2: " << iRes2[i].logits[0].logit
                     << " Sim: " << sim
                     << "\n";
-
-        metrics.push_back(m);
         sumSim += sim;
     }
 
