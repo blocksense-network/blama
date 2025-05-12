@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025 Schelling Point Ventures Inc.
+// SPDX-License-Identifier: MIT
+//
 #include <doctest/doctest.h>
 
 #include <llama/LogitComparer.hpp>
