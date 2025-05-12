@@ -4,4 +4,4 @@
 add_subdirectory(code)
 
 bl_add_example_subdir()
-# bl_add_test_subdir()
+bl_add_test_subdir()
