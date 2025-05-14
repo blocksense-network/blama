@@ -78,11 +78,13 @@ int main() try {
     sessionCpu.setInitialPrompt(modelCpu.vocab().tokenize(prompt, true, true));
     auto iRes2 = sessionCpu.fillCtx(iRes);
 
-    std::vector<bl::llama::LogitComparer::ComparisonMetrics> metrics(iRes.size());
+        bl::llama::MetricsAggregator metricsAgg;
     float sumSim = 0;
+    float score = 0;
     for (size_t i = 0; i < iRes.size(); i++) {
         float sim = bl::llama::LogitComparer::logitSimilarity(iRes[i].logits, iRes2[i].logits);
-        metrics[i] = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+        auto m = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+        score = metricsAgg.pushAndVerify({ &m, 1 });
         std::cout   << "Token: '" << model.vocab().tokenToString(iRes[i].token) << "' - "
                     << " Logits: " << iRes[i].logits[0].logit << " Logits2: " << iRes2[i].logits[0].logit
                     << " Sim: " << sim
@@ -91,7 +93,7 @@ int main() try {
     }
 
     std::cout << "\n\nAverage similarity: " << sumSim / iRes.size() << "\n";
-    std::cout << "Final metrics score: " << bl::llama::LogitComparer::comparisonFinalScore(metrics) << "\n";
+    std::cout << "Final metrics score: " << score << "\n";
     std::cout << '\n';
 
     return 0;

@@ -130,16 +130,18 @@ int main() try {
         auto iRes2 = sessionCpu.fillCtx(iRes);
 
         // Compare the metrics
-        std::vector<bl::llama::LogitComparer::ComparisonMetrics> metrics(iRes.size());
+        bl::llama::MetricsAggregator metricsAgg;
         float sumSim = 0;
+        float score = 0;
         for (size_t i = 0; i < iRes.size(); i++) {
             float sim = bl::llama::LogitComparer::logitSimilarity(iRes[i].logits, iRes2[i].logits);
-            metrics[i] = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+            auto m = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+            score = metricsAgg.pushAndVerify({ &m, 1 });
             sumSim += sim;
         }
 
         std::cout << "\n\nAverage similarity: " << sumSim / iRes.size() << "\n";
-        std::cout << "Final metrics score: " << bl::llama::LogitComparer::comparisonFinalScore(metrics) << "\n";
+        std::cout << "Final metrics score: " << score << "\n";
 
         std::cout << "\n";
 

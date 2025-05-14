@@ -33,7 +33,8 @@ TEST_CASE("compare - no model") {
     CHECK(metrics.jsd == 0.0f);
 
     // evalueate metrics
-    auto score = bl::llama::LogitComparer::comparisonFinalScore({&metrics, 1});
+    bl::llama::MetricsAggregator metricsAgg;
+    auto score = metricsAgg.pushAndVerify({&metrics, 1});
     CHECK(score == 1.0f);
 }
 
@@ -69,17 +70,18 @@ TEST_CASE("compare - with model") {
     session2.setInitialPrompt(model.vocab().tokenize("President George W.", true, true));
     auto iRes2 = session2.fillCtx(iRes);
 
-    std::vector<bl::llama::LogitComparer::ComparisonMetrics> metrics(iRes.size());
+    bl::llama::MetricsAggregator metricsAgg;
     float sumSim = 0;
+    float score = 0;
     for (size_t i = 0; i < iRes.size(); i++) {
         float sim = bl::llama::LogitComparer::logitSimilarity(iRes[i].logits, iRes2[i].logits);
-        metrics[i] = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+        auto m = bl::llama::LogitComparer::compare(iRes[i].logits, iRes2[i].logits);
+        score = metricsAgg.pushAndVerify({&m, 1});
         sumSim += sim;
     }
 
     float averageSim = sumSim / iRes.size();
     CHECK(averageSim >= 0.98f);
 
-    float finalScore = bl::llama::LogitComparer::comparisonFinalScore(metrics);
-    CHECK(finalScore >= 0.95f);
+    CHECK(score >= 0.95f);
 }

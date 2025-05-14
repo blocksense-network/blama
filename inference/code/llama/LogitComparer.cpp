@@ -36,7 +36,7 @@ namespace bl::llama {
 //  - If the distance is ≤ 2% of the max distance, we can consider them equal
 // 3. Compare the Jensen-Shannon divergence of the probabilities
 //  - If the divergence is ≤ 0.05, we can consider them equal
-LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& data1, const TokenDataVector& data2) {
+ComparisonMetrics LogitComparer::compare(const TokenDataVector& data1, const TokenDataVector& data2) {
     ComparisonMetrics metrics;
     metrics.top1Match = data1[0].token == data2[0].token ? 1.0f : 0.0f;
 
@@ -52,18 +52,6 @@ LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& d
     metrics.jsd = jsd(prob_map, prob_map2);
 
     return metrics;
-}
-
-// Final score is a weighted sum of the metrics.
-// if the final score is ≥ 0.95 we can consider them equal
-float LogitComparer::comparisonFinalScore(std::span<ComparisonMetrics> metrics) {
-    double total = 0.0f;
-    for (auto& m : metrics) {
-        total +=
-            0.5 * (1.0f - m.distance) +
-            0.5 * (1.0f - m.jsd);
-    }
-    return float(total / metrics.size());
 }
 
 float LogitComparer::logitSimilarity(const TokenDataVector& data1, const TokenDataVector& data2) {
@@ -124,6 +112,19 @@ float LogitComparer::euclidean_distance_sq(std::span<const TokenData> tokens) {
     // To achieve total result, we need to take the square root of the sum,
     // but since we don't need it to be accurate, we can skip it
     return distance;
+}
+
+float MetricsAggregator::pushAndVerify(std::span<const ComparisonMetrics> m) {
+    metrics.insert(metrics.end(), m.begin(), m.end());
+
+    double total = 0.0f;
+    for (auto& m : metrics) {
+        total +=
+            0.5 * (1.0f - m.distance) +
+            0.5 * (1.0f - m.jsd);
+    }
+
+    return float(total / metrics.size());
 }
 
 }
