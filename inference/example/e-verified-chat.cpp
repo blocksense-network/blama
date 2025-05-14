@@ -103,14 +103,16 @@ int main() try {
         auto& session = instance.startSession({});
         auto& sessionCpu = instanceCpu.startSession({});
 
+        // set up same context for both sessions
         session.setInitialPrompt(model.vocab().tokenize(formattedChat, true, true));
         sessionCpu.setInitialPrompt(modelCpu.vocab().tokenize(formattedChat, true, true));
 #else
         auto formatted = chatFormat.formatMsg(userMsg, messages, true);
         tokenizedPrompt = model.vocab().tokenize(formatted, true, true);
+        // push the same prompt that will be applied in the other session during complete
         sessionCpu.pushPrompt(modelCpu.vocab().tokenize(formatted, true, true));
 #endif
-
+        // Generate the response
         auto iRes = session.complete({
             .prompt = tokenizedPrompt,
             .maxTokens = 100
@@ -124,8 +126,10 @@ int main() try {
         std::cout << roleAssistant << ": " << response << "\n";
         messages.push_back({ roleAssistant, response });
 
+        // Generate the metrics based on the response from the other session
         auto iRes2 = sessionCpu.fillCtx(iRes);
 
+        // Compare the metrics
         std::vector<bl::llama::LogitComparer::ComparisonMetrics> metrics(iRes.size());
         float sumSim = 0;
         for (size_t i = 0; i < iRes.size(); i++) {
