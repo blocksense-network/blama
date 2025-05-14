@@ -188,6 +188,29 @@ TokenPrediction Session::getToken() {
     };
 }
 
+std::vector<TokenPrediction> Session::complete(Session::CompleteParams params) {
+    if (m_state.m_phase != State::Phase::Generating) {
+        throw_ex{} << "Session hasn't started yet";
+    }
+
+    flushPendingState();
+
+    if (params.prompt.size() || params.postfix.size()) {
+        pushPrompt(params.prompt, params.postfix);
+    }
+
+    std::vector<TokenPrediction> predictions;
+    for (int32_t i = 0; i < params.maxTokens; i++) {
+        auto p = getToken();
+        if (p.token == Token_Invalid) {
+            break;
+        }
+        predictions.push_back(p);
+    }
+
+    return predictions;
+}
+
 std::vector<TokenPrediction> Session::fillCtx(std::span<TokenPrediction> tokens) {
     std::vector<TokenPrediction> result;
     result.reserve(tokens.size());

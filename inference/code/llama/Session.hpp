@@ -43,6 +43,13 @@ public:
     // main functions to interact with the model
     void pushPrompt(std::span<const Token> prompt, std::span<const Token> postfix = {});
     TokenPrediction getToken();
+    struct CompleteParams{
+        std::span<const Token> prompt;
+        std::span<const Token> postfix;
+        int32_t maxTokens = 0;
+    };
+    std::vector<TokenPrediction> complete(CompleteParams params);
+
     std::vector<TokenPrediction> fillCtx(std::span<TokenPrediction> tokens);
     std::vector<uint8_t> getState();
 private:

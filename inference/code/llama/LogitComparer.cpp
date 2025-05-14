@@ -36,8 +36,6 @@ namespace bl::llama {
 //  - If the distance is ≤ 2% of the max distance, we can consider them equal
 // 3. Compare the Jensen-Shannon divergence of the probabilities
 //  - If the divergence is ≤ 0.05, we can consider them equal
-// 4. Compare the Jaccard index of the probabilities
-//  - If at ≥ 80% of the tokens are the same, we can consider them equal
 LogitComparer::ComparisonMetrics LogitComparer::compare(const TokenDataVector& data1, const TokenDataVector& data2) {
     ComparisonMetrics metrics;
     metrics.top1Match = data1[0].token == data2[0].token ? 1.0f : 0.0f;

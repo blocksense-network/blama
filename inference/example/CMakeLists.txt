@@ -14,3 +14,4 @@ endfunction()
 
 add_llama_example(basic)
 add_llama_example(verify)
+add_llama_example(verified-chat)
