@@ -61,14 +61,12 @@ int main() try {
     auto& session = instance.startSession({});
     session.setInitialPrompt(model.vocab().tokenize(prompt, true, true));
 
-    // generate and print 100 tokens
-    for (int i = 0; i < 100; ++i) {
-        auto pred = session.getToken();
-        if (pred.token == bl::llama::Token_Invalid) {
-            // no more tokens
-            break;
-        }
-        std::cout << model.vocab().tokenToString(pred.token);
+    auto stream = session.completeStream({
+        .maxTokens = 100
+    });
+
+    while (auto p = stream.complete()) {
+        std::cout << model.vocab().tokenToString(p.token);
     }
     std::cout << '\n';
 

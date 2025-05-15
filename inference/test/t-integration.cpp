@@ -66,20 +66,25 @@ TEST_CASE("inference") {
         tokens = model.vocab().tokenize("President George W.", true, true);
         s.setInitialPrompt(tokens);
         {
-                auto p = s.getToken();
-                REQUIRE(p.token != bl::llama::Token_Invalid);
-                auto text = model.vocab().tokenToString(p.token);
+                auto p = s.complete({
+                    .maxTokens = 1
+                });
+                REQUIRE(p[0].token != bl::llama::Token_Invalid);
+                auto text = model.vocab().tokenToString(p[0].token);
                 CHECK(text == " Bush");
         }
 
         SUBCASE("default sampler") {
             // add more very suggestive stuff
             tokens = model.vocab().tokenize(" sent troops to Cleveland which was hit by torrential", false, false);
-            s.pushPrompt(tokens);
             {
-                auto p = s.getToken();
-                REQUIRE(p.token != bl::llama::Token_Invalid);
-                auto text = model.vocab().tokenToString(p.token);
+                auto p = s.complete({
+                    .prompt = tokens,
+                    .maxTokens = 1
+                });
+                REQUIRE(p.size() == 1);
+                REQUIRE(p[0].token != bl::llama::Token_Invalid);
+                auto text = model.vocab().tokenToString(p[0].token);
                 CHECK(text.starts_with(" rain")); // could be rains
             }
         }
@@ -103,11 +108,13 @@ TEST_CASE("inference") {
 
             // add more very suggestive stuff
             tokens = model.vocab().tokenize(" sent troops to Cleveland which was hit by torrential", false, false);
-            s.pushPrompt(tokens);
             {
-                auto p = s.getToken();
-                REQUIRE(p.token != bl::llama::Token_Invalid);
-                auto text = model.vocab().tokenToString(p.token);
+                auto p = s.complete({
+                    .prompt = tokens,
+                    .maxTokens = 1
+                });
+                REQUIRE(p[0].token != bl::llama::Token_Invalid);
+                auto text = model.vocab().tokenToString(p[0].token);
                 CHECK(text.starts_with(" down"));
             }
         }
@@ -129,13 +136,13 @@ TEST_CASE("session") {
     inst.warmup(); // should be safe
     SUBCASE("no initalization") {
         auto& s = inst.startSession({});
-        SUBCASE("getToken") {
-            CHECK_THROWS_WITH(s.getToken(), "Session hasn't started yet");
+        SUBCASE("complete") {
+            CHECK_THROWS_WITH(s.complete({}), "Session hasn't started yet");
         }
 
-        SUBCASE("pushPrompt") {
+        SUBCASE("completeStream") {
             auto tokens = model.vocab().tokenize("President George W.", true, true);
-            CHECK_THROWS_WITH(s.pushPrompt(tokens), "Session hasn't started yet");
+            CHECK_THROWS_WITH(s.completeStream({.prompt = tokens}), "Session hasn't started yet");
         }
 
         SUBCASE("getState") {
@@ -157,14 +164,20 @@ TEST_CASE("session") {
             s.setInitialPrompt(tokens);
         }
         {
-            auto p = s.getToken();
-            CHECK(model.vocab().tokenToString(p.token) == " Bush");
+            auto p = s.complete({
+                .maxTokens = 1
+            });
+            REQUIRE(p.size() == 1);
+            CHECK(model.vocab().tokenToString(p[0].token) == " Bush");
         }
         {
             auto tokens = model.vocab().tokenize(" usually goes to Washington to", true, true);
-            s.pushPrompt(tokens);
-            auto p = s.getToken();
-            auto text = model.vocab().tokenToString(p.token);
+            auto p = s.complete({
+                .prompt = tokens,
+                .maxTokens = 1
+            });
+            REQUIRE(p.size() == 1);
+            auto text = model.vocab().tokenToString(p[0].token);
             CHECK(text.starts_with(" meet")); // could be rains
         }
         {
@@ -180,7 +193,7 @@ TEST_CASE("session") {
 }
 
 // commented out because it relies on specific calc
-//TEST_CASE("session states") {
+//TEST_CASE("control vector") {
 //    bl::llama::Model::Params iParams = {};
 //    auto lmodel = bl::llama::ModelRegistry::getInstance().loadModel(Model_117m_q6_k, {}, iParams);
 //    bl::llama::Model model(lmodel, iParams);
@@ -232,7 +245,7 @@ TEST_CASE("session") {
 //    }
 //}
 
-TEST_CASE("control_vector") {
+TEST_CASE("states") {
     bl::llama::Model model(Model_117m_q6_k, {});
     CHECK(!!model.lmodel());
 
@@ -266,23 +279,24 @@ TEST_CASE("control_vector") {
 
         // save the initial state
         initialState = s.getState();
+        auto predict1 = s.complete({
+            .maxTokens = nPredict / 2
+        });
 
-        for (size_t i = 0; i < nPredict; i++) {
-            auto p = s.getToken();
-            REQUIRE(p.token != bl::llama::Token_Invalid);
-            auto text = model.vocab().tokenToString(p.token);
-            generatedStr += text;
-
-            if (i == nPredict / 2) {
-                // save state after half of the tokens are generated
-                sessionMiddleState = s.getState();
-            }
-
-            if (i > nPredict / 2) {
-                // save generated string after after we've saved the state
-                generatedStr2 += text;
-            }
+        for (size_t i = 0; i < predict1.size(); i++) {
+            generatedStr += model.vocab().tokenToString(predict1[i].token);
         }
+
+        sessionMiddleState = s.getState();
+
+        auto predict2 = s.complete({
+            .maxTokens = nPredict / 2
+        });
+
+        for (size_t i = 0; i < predict2.size(); i++) {
+            generatedStr2 += model.vocab().tokenToString(predict2[i].token);
+        }
+
         inst.stopSession();
     }
 
@@ -293,11 +307,12 @@ TEST_CASE("control_vector") {
         s.setState(initialState);
         std::string restoredStr;
 
-        for (size_t i = 0; i < nPredict; i++) {
-            auto p = s.getToken();
-            REQUIRE(p.token != bl::llama::Token_Invalid);
-            auto text = model.vocab().tokenToString(p.token);
-            restoredStr += text;
+        auto predict = s.complete({
+            .maxTokens = nPredict / 2
+        });
+
+        for (size_t i = 0; i < predict.size(); i++) {
+            restoredStr += model.vocab().tokenToString(predict[i].token);
         }
 
         CHECK(restoredStr == generatedStr);
@@ -315,11 +330,12 @@ TEST_CASE("control_vector") {
             auto& s = inst.startSession({});
             s.setState(sessionMiddleState);
 
-            for (size_t i = 0; i < nPredict / 2; i++) {
-                auto p = s.getToken();
-                REQUIRE(p.token != bl::llama::Token_Invalid);
-                auto text = model.vocab().tokenToString(p.token);
-                restoredStr += text;
+            auto predict = s.complete({
+                .maxTokens = nPredict / 2
+            });
+
+            for (size_t i = 0; i < predict.size(); i++) {
+                restoredStr += model.vocab().tokenToString(predict[i].token);
             }
             inst.stopSession();
         }
@@ -333,11 +349,12 @@ TEST_CASE("control_vector") {
             auto& s = inst.startSession({});
             s.setState(sessionMiddleState);
 
-            for (size_t i = 0; i < nPredict / 2; i++) {
-                auto p = s.getToken();
-                REQUIRE(p.token != bl::llama::Token_Invalid);
-                auto text = model.vocab().tokenToString(p.token);
-                restoredStr2 += text;
+            auto predict = s.complete({
+                .maxTokens = nPredict / 2
+            });
+
+            for (size_t i = 0; i < predict.size(); i++) {
+                restoredStr2 += model.vocab().tokenToString(predict[i].token);
             }
 
             // Test that each session started from the same state produces the same string

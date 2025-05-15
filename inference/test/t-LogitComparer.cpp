@@ -49,17 +49,9 @@ TEST_CASE("compare - with model") {
     auto& session = instance.startSession({});
     session.setInitialPrompt(model.vocab().tokenize("President George W.", true, true));
 
-    std::vector<bl::llama::TokenPrediction> iRes;
-
-    constexpr int maxTokens = 20;
-    for (int i = 0; i < maxTokens; ++i) {
-        auto pred = session.getToken();
-        if (pred.token == bl::llama::Token_Invalid) {
-            // no more tokens
-            break;
-        }
-        iRes.push_back(pred);
-    }
+    std::vector<bl::llama::TokenPrediction> iRes = session.complete({
+        .maxTokens = 20
+    });
 
     // compare with the same model
     bl::llama::Model model2(Model_117m_q6_k, {

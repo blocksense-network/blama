@@ -211,6 +211,22 @@ std::vector<TokenPrediction> Session::complete(Session::CompleteParams params) {
     return predictions;
 }
 
+Session::StreamGenerator Session::completeStream(CompleteParams params) {
+    if (m_state.m_phase != State::Phase::Generating) {
+        throw_ex{} << "Session hasn't started yet";
+    }
+
+    flushPendingState();
+
+    if (params.prompt.size() || params.postfix.size()) {
+        pushPrompt(params.prompt, params.postfix);
+    }
+
+    m_state.m_phase = Session::State::Phase::Streaming;
+
+    return Session::StreamGenerator(*this, params);
+}
+
 std::vector<TokenPrediction> Session::fillCtx(std::span<TokenPrediction> tokens) {
     std::vector<TokenPrediction> result;
     result.reserve(tokens.size());
@@ -380,5 +396,31 @@ void Session::flushPendingState() {
         doDecode({&m_state.m_currToken, 1}, Source::Generated);
         m_state.m_currToken = Token_Invalid;
     }
+}
+
+TokenPrediction Session::StreamGenerator::complete() {
+    if (m_session.m_state.m_phase != Session::State::Phase::Streaming ||
+        m_status != Status::InProgress) {
+        return {.token = Token_Invalid};
+    }
+
+    auto p = m_session.getToken();
+    if (p.token == Token_Invalid) {
+        // return session in Generating phase
+        m_session.m_state.m_phase = Session::State::Phase::Generating;
+
+        m_status = Status::Completed;
+        return p;
+    }
+
+    m_genTokens++;
+    if (m_genTokens >= m_params.maxTokens) {
+        m_status = Status::Completed;
+    }
+    return p;
+}
+
+void Session::StreamGenerator::abort() {
+    m_status = Status::Aborted;
 }
 } // namespace bl::llama

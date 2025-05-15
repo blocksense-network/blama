@@ -19,6 +19,10 @@ class Instance;
 struct TokenPrediction {
     Token token;
     TokenDataVector logits;
+
+    operator bool() const {
+        return token != Token_Invalid;
+    }
 };
 
 class BL_LLAMA_API Session {
@@ -39,16 +43,40 @@ public:
     // initial functions to prepare the session
     void setInitialPrompt(std::span<const Token> prompt);
     bool setState(std::span<uint8_t> state);
-
-    // main functions to interact with the model
-    void pushPrompt(std::span<const Token> prompt, std::span<const Token> postfix = {});
-    TokenPrediction getToken();
     struct CompleteParams{
         std::span<const Token> prompt;
         std::span<const Token> postfix;
         int32_t maxTokens = 0;
     };
     std::vector<TokenPrediction> complete(CompleteParams params);
+
+    class StreamGenerator{
+    public:
+        StreamGenerator(Session& session, CompleteParams params)
+            : m_session(session)
+            , m_params(params)
+            , m_genTokens(0)
+            , m_status(Status::InProgress)
+        {}
+
+        TokenPrediction complete();
+        void abort();
+
+        enum class Status {
+            InProgress,
+            Completed,
+            Aborted
+        };
+        Status status() const { return m_status; }
+    private:
+        friend class Session;
+
+        Session& m_session;
+        CompleteParams m_params;
+        int32_t m_genTokens;
+        Status m_status;
+    };
+    StreamGenerator completeStream(CompleteParams params);
 
     std::vector<TokenPrediction> fillCtx(std::span<TokenPrediction> tokens);
     std::vector<uint8_t> getState();
@@ -59,6 +87,10 @@ private:
         Generated
     };
 
+    // main functions to interact with the model
+    void pushPrompt(std::span<const Token> prompt, std::span<const Token> postfix = {});
+    TokenPrediction getToken();
+
     void doDecode(std::span<const Token> tokens, Source src);
     void flushPendingState();
     TokenDataVector getLogitsFromCtx(int32_t topK);
@@ -67,7 +99,8 @@ private:
     struct State {
         enum class Phase {
             Initial,
-            Generating
+            Generating,
+            Streaming
         };
 
         Phase m_phase = Phase::Initial;

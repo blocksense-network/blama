@@ -56,18 +56,14 @@ int main() try {
     auto& session = instance.startSession({});
     session.setInitialPrompt(model.vocab().tokenize(prompt, true, true));
 
-    std::vector<bl::llama::TokenPrediction> iRes;
+    std::vector<bl::llama::TokenPrediction> iRes = session.complete({
+        .maxTokens = 20
+    });
 
-    constexpr int maxTokens = 20;
-    for (int i = 0; i < maxTokens; ++i) {
-        auto pred = session.getToken();
-        if (pred.token == bl::llama::Token_Invalid) {
-            // no more tokens
-            break;
-        }
-        iRes.push_back(pred);
-        std::cout << model.vocab().tokenToString(pred.token);
+    for (size_t i = 0; i < iRes.size(); i++) {
+        std::cout << model.vocab().tokenToString(iRes[i].token);
     }
+    std::cout << "\n";
 
     bl::llama::Model modelCpu(modelGguf, {
         .gpu = false

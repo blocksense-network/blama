@@ -115,15 +115,13 @@ public:
             session.setInitialPrompt(vocab.tokenize(req.body(), true, true));
 
             std::stringstream ss;
-            for (int i = 0; i < 200; ++i) {
-                auto pred = session.getToken();
-                if (pred.token == bl::llama::Token_Invalid) {
-                    // no more tokens
-                    break;
-                }
-                ss << vocab.tokenToString(pred.token);
-            }
+            auto tokenStream = session.completeStream({
+                .maxTokens = 200
+            });
 
+            while (auto p = tokenStream.complete()) {
+                ss << vocab.tokenToString(p.token);
+            }
 
             // Prepare the response
             http::response<http::string_body> res(http::status::ok, req.version());
