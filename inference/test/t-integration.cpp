@@ -185,10 +185,66 @@ TEST_CASE("session") {
         }
     }
 
+    SUBCASE("generation streaming") {
+        auto& s = inst.startSession({});
+        {
+            auto tokens = model.vocab().tokenize("President George W.", true, true);
+            s.setInitialPrompt(tokens);
+        }
+        {
+            auto stream = s.completeStream({
+                .maxTokens = 1
+            });
+            auto p = stream.complete();
+            CHECK(model.vocab().tokenToString(p.token) == " Bush");
+        }
+        {
+            auto tokens = model.vocab().tokenize(" usually goes to Washington to", true, true);
+            auto stream = s.completeStream({
+                .prompt = tokens,
+                .maxTokens = 1
+            });
+            auto p = stream.complete();
+            auto text = model.vocab().tokenToString(p.token);
+            CHECK(text.starts_with(" meet")); // could be rains
+        }
+    }
+
     SUBCASE("single session") {
         auto& s = inst.startSession({});
         (void)s;
         CHECK_THROWS_WITH(inst.startSession({}), "Session is already started. Stop it to start a new one.");
+    }
+
+    SUBCASE("filling ctx") {
+        bl::llama::Instance inst2(model, {});
+        inst2.warmup();
+
+        auto& s = inst.startSession({});
+        auto& s2 = inst2.startSession({});
+
+        auto tokens = model.vocab().tokenize("President George W.", true, true);
+        s.setInitialPrompt(tokens);
+        s2.setInitialPrompt(tokens);
+
+        auto p = s.complete({
+            .maxTokens = 10
+        });
+
+        CHECK(model.vocab().tokenToString(p[0].token) == " Bush");
+
+        auto p2 = s2.fillCtx(p);
+
+        CHECK(p.size() == p2.size());
+
+        for (size_t i = 0; i < p.size(); i++) {
+            for (size_t j = 0; j < p[i].logits.size(); j++) {
+                auto& l = p[i].logits[j];
+                auto& l2 = p2[i].logits[j];
+                CHECK(l.token == l2.token);
+                CHECK(l.logit == l2.logit);
+            }
+        }
     }
 }
 

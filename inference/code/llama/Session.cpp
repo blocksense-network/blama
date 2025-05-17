@@ -166,7 +166,8 @@ void Session::pushPrompt(std::span<const Token> prompt, std::span<const Token> p
 }
 
 TokenPrediction Session::getToken() {
-    if (m_state.m_phase != State::Phase::Generating) {
+    if (m_state.m_phase != State::Phase::Generating
+        && m_state.m_phase != State::Phase::Streaming) {
         throw_ex{} << "Session hasn't started yet";
     }
 
@@ -243,7 +244,8 @@ std::vector<TokenPrediction> Session::fillCtx(std::span<TokenPrediction> tokens)
 }
 
 TokenDataVector Session::getLogitsFromCtx(int32_t topK) {
-    if (m_state.m_phase != State::Phase::Generating) {
+    if (m_state.m_phase != State::Phase::Generating
+        && m_state.m_phase != State::Phase::Streaming) {
         throw_ex{} << "Session hasn't started yet";
     }
 
@@ -259,7 +261,8 @@ TokenDataVector Session::getLogitsFromCtx(int32_t topK) {
 }
 
 TokenDataVector Session::getLogitsFromCtx(TokenDataVector tokens) {
-    if (m_state.m_phase != State::Phase::Generating) {
+    if (m_state.m_phase != State::Phase::Generating
+        && m_state.m_phase != State::Phase::Streaming) {
         throw_ex{} << "Session hasn't started yet";
     }
 
@@ -415,6 +418,7 @@ TokenPrediction Session::StreamGenerator::complete() {
 
     m_genTokens++;
     if (m_genTokens >= m_params.maxTokens) {
+        m_session.m_state.m_phase = Session::State::Phase::Generating;
         m_status = Status::Completed;
     }
     return p;
