@@ -50,7 +50,7 @@ public:
     };
     std::vector<TokenPrediction> complete(CompleteParams params);
 
-    class StreamGenerator{
+    class BL_LLAMA_API StreamGenerator{
     public:
         StreamGenerator(Session& session, CompleteParams params)
             : m_session(session)
