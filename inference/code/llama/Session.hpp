@@ -45,7 +45,7 @@ public:
     bool setState(std::span<uint8_t> state);
     struct CompleteParams{
         std::span<const Token> prompt;
-        std::span<const Token> postfix;
+        std::span<const Token> suffix;
         int32_t maxTokens = 0;
     };
     std::vector<TokenPrediction> complete(CompleteParams params);

@@ -196,8 +196,8 @@ std::vector<TokenPrediction> Session::complete(Session::CompleteParams params) {
 
     flushPendingState();
 
-    if (params.prompt.size() || params.postfix.size()) {
-        pushPrompt(params.prompt, params.postfix);
+    if (params.prompt.size() || params.suffix.size()) {
+        pushPrompt(params.prompt, params.suffix);
     }
 
     std::vector<TokenPrediction> predictions;
@@ -219,8 +219,8 @@ Session::StreamGenerator Session::completeStream(CompleteParams params) {
 
     flushPendingState();
 
-    if (params.prompt.size() || params.postfix.size()) {
-        pushPrompt(params.prompt, params.postfix);
+    if (params.prompt.size() || params.suffix.size()) {
+        pushPrompt(params.prompt, params.suffix);
     }
 
     m_state.m_phase = Session::State::Phase::Streaming;
