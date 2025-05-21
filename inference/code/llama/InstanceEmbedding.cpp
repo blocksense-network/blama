@@ -34,7 +34,6 @@ llama_context_params llamaFromInstanceInitParams(const InstanceEmbedding::InitPa
 
 InstanceEmbedding::InstanceEmbedding(Model& model, InitParams params)
     : m_model(model)
-    , m_sampler(model, {})
     , m_params(std::move(params))
     , m_lctx(llama_init_from_model(model.lmodel(), llamaFromInstanceInitParams(params)), llama_free)
 {

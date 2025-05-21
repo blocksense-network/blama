@@ -40,11 +40,9 @@ public:
     uint32_t embeddingDim() const noexcept;
 
     const Model& model() const noexcept { return m_model; }
-    Sampler& sampler() noexcept { return m_sampler; }
 
 private:
     Model& m_model;
-    Sampler m_sampler;
     InitParams m_params;
     bstl::c_unique_ptr<llama_context> m_lctx;
     std::optional<Session> m_session;

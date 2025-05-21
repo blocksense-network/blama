@@ -42,15 +42,17 @@ TokenDataVector fillLogits(llama_context* lctx, std::function<bool(llama_token)>
 Session::Session(Instance& instance, llama_context* ctx, InitParams params)
     : m_instance(instance)
     , m_ctx(ctx)
+    , m_sampler(new Sampler(instance.model(), {
+        .rngSeed = params.seed,
+        .temp = params.temperature,
+        .topP = params.topP,
+        .grammar = params.grammar,
+    }))
     , m_params(std::move(params))
 {
-    auto& sampler = m_instance.sampler();
-
     llama_kv_self_clear(m_ctx);
     llama_synchronize(m_ctx);
     llama_perf_context_reset(m_ctx);
-    sampler.reset();
-    sampler.perfReset();
 
     const auto ctxLen = llama_n_ctx(m_ctx);
     m_state.maxTokens = ctxLen - 4; // (#16)
@@ -116,10 +118,9 @@ void Session::pushPrompt(std::span<const Token> prompt, std::span<const Token> p
     }
 
     auto& model = m_instance.model();
-    auto& sampler = m_instance.sampler();
 
     // reset sampling and don't allow previous inputs to affect the generation
-    sampler.reset();
+    m_sampler->reset();
 
     std::vector<Token> tokens;
     constexpr uint32_t maxAdditionalTokens = 4; // bos + fim_pre + fim_suf + fim_mid
@@ -173,10 +174,9 @@ TokenPrediction Session::getToken() {
 
     flushPendingState();
 
-    auto& sampler = m_instance.sampler();
     auto& vocab = m_instance.model().vocab();
 
-    m_state.m_currToken = sampler.sample(m_ctx);
+    m_state.m_currToken = m_sampler->sample(m_ctx);
 
     if (vocab.isEog(m_state.m_currToken)) {
         // don't decode eog tokens in case the the interaction is continued
@@ -320,7 +320,6 @@ void Session::doDecode(std::span<const Token> tokens, Source src) {
     bool haveFullContextMitigation = false;
     const auto gaFactor = m_params.gaFactor;
     const auto ctxLen = llama_n_ctx(m_ctx);
-    auto& sampler = m_instance.sampler();
 
     if (gaFactor == 1) {
         // infinite text generation via context shifting
@@ -375,7 +374,7 @@ void Session::doDecode(std::span<const Token> tokens, Source src) {
     // add to sampler
     for (auto t : tokens) {
         // only apply grammar for generated content
-        sampler.accept(t, src == Source::Generated);
+        m_sampler->accept(t, src == Source::Generated);
     }
 
     // decode
@@ -399,6 +398,10 @@ void Session::flushPendingState() {
         doDecode({&m_state.m_currToken, 1}, Source::Generated);
         m_state.m_currToken = Token_Invalid;
     }
+}
+
+void Session::resetSampler(const Sampler::Params& params){
+        m_sampler.reset(new Sampler(m_instance.model(), params));
 }
 
 TokenPrediction Session::StreamGenerator::complete() {

@@ -104,7 +104,7 @@ TEST_CASE("inference") {
                 bl::llama::Sampler::SamplingType::Top_K,
                 bl::llama::Sampler::SamplingType::Top_P,
                 };
-            inst.resetSampler(samplerParams);
+            s.resetSampler(samplerParams);
 
             // add more very suggestive stuff
             tokens = model.vocab().tokenize(" sent troops to Cleveland which was hit by torrential", false, false);

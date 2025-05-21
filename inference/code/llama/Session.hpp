@@ -4,6 +4,7 @@
 #pragma once
 #include "api.h"
 #include "Token.hpp"
+#include "Sampler.hpp"
 #include <span>
 #include <utility>
 #include <exception>
@@ -34,6 +35,11 @@ public:
         // if true, the inference tries to extend the context by truncating previous tokens
         // only used if gaFactor == 1
         bool infiniteContext = true;
+
+        uint32_t seed = 0; // random seed for sampling
+        std::string grammar; // BNF-styled grammar
+        float temperature = 0.80f; // temperature for sampling
+        float topP = 0.95f; // nucleus sampling
     };
     Session(Instance& instance, llama_context* ctx, InitParams params);
     Session(const Session&) = delete;
@@ -80,6 +86,10 @@ public:
 
     std::vector<TokenPrediction> fillCtx(std::span<TokenPrediction> tokens);
     std::vector<uint8_t> getState();
+
+    // Change sampler settings by resetting it
+    // warning: this will clear any previous sampler state
+    void resetSampler(const Sampler::Params& params);
 private:
     enum class Source {
         InitialPrompt,
@@ -114,6 +124,7 @@ private:
 
     Instance& m_instance;
     llama_context* m_ctx;
+    std::unique_ptr<Sampler> m_sampler;
     InitParams m_params;
     State m_state;
 };

@@ -61,16 +61,13 @@
 ...
 auto requestBody = parseAndValidate(body); // this function doesn't exist ATM
 bl::llama::Model model(requestBody.model, {});
-// Params as rngSeed, temperature, topP have to be added
-// Since the instance create a sampler we can create them here.
-// Otherwise, we can move their initialization to the Session.
-bl::llama::Instance instance(model, {
+bl::llama::Instance instance(model, {});
+instance.warmup();
+auto& session = instance.startSession({
   .rngSeed = requestBody.seed,
   .temperature = requestBody.temperature,
   .topP = requestBody.topP
-});
-instance.warmup();
-auto& session = instance.startSession({});
+  });
 session.setInitialPrompt(model.vocab().tokenize(requestBody.prompt, true, true));
 auto tokens_data = session.complete({
   .suffix = requestBody.suffix,
@@ -156,14 +153,7 @@ for (auto& p : tokens_data) {
 ...
 auto requestBody = parseAndValidate(body); // this function doesn't exist ATM
 bl::llama::Model model(requestBody.model, {});
-// Params as rngSeed, temperature, topP have to be added
-// Since the instance create a sampler we can create them here.
-// Otherwise, we can move their initialization to the Session.
-bl::llama::Instance instance(model, {
-  .rngSeed = requestBody.seed,
-  .temperature = requestBody.temperature,
-  .topP = requestBody.topP
-});
+bl::llama::Instance instance(model, {});
 instance.warmup();
 
 bl::llama::ChatFormat::Params chatParams = bl::llama::ChatFormat::getChatParams(model);
@@ -171,7 +161,11 @@ chatParams.roleAssistant = "Assistant"; // Check we actually need this
 bl::llama::ChatFormat chatFormat(chatParams);
 auto formattedChat = chatFormat.formatChat(requestBody.messages, true);
 
-auto& session = instance.startSession({});
+auto& session = instance.startSession({
+  .rngSeed = requestBody.seed,
+  .temperature = requestBody.temperature,
+  .topP = requestBody.topP
+});
 session.setInitialPrompt(model.vocab().tokenize(formattedChat, true, true));
 auto tokens_data = session.complete({
   .maxTokens = requestBody.maxCompletionTokens
