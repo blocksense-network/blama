@@ -34,6 +34,8 @@ public:
         m_threads.reserve(n);
         for (size_t i = 0; i < n; ++i) {
             m_threads.push_back(std::thread([i, n, &ctx]() mutable {
+                (void)i;
+                (void)n;
                 ctx.run();
             }));
         }
