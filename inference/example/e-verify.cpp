@@ -74,7 +74,7 @@ int main() try {
     sessionCpu.setInitialPrompt(modelCpu.vocab().tokenize(prompt, true, true));
     auto iRes2 = sessionCpu.fillCtx(iRes);
 
-        bl::llama::MetricsAggregator metricsAgg;
+    bl::llama::MetricsAggregator metricsAgg;
     float sumSim = 0;
     float score = 0;
     for (size_t i = 0; i < iRes.size(); i++) {

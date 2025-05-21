@@ -27,7 +27,8 @@ public:
         uint32_t maxTokens = 0;
         uint32_t seed = 0;
         std::string suffix;
-        float temperature = 0.7f;
+        float temperature = 0.8f;
+        float topP = 0.95f;
     };
 
     struct TokenData {
