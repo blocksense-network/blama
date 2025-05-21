@@ -5,11 +5,15 @@
 #include "api.h"
 #include <memory>
 
-namespace bl::llama::server {
+namespace bl::llama {
+
+class Model;
+
+namespace server {
 
 class BL_LLAMA_SERVER_API Server {
 public:
-    Server();
+    Server(std::shared_ptr<Model> model);
     ~Server();
 
     Server(const Server&) = delete;
@@ -20,4 +24,5 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace bl::llama::server
+} // namespace server
+} // namespace bl::llama

@@ -6,12 +6,14 @@
 namespace bl::llama::server {
 
 struct Server::Impl {
-  Impl() = default;
-  ~Impl() = default;
+    std::shared_ptr<Model> m_model;
+    Impl(std::shared_ptr<Model> model)
+        : m_model(std::move(model))
+    {}
 };
 
-Server::Server()
-    : m_impl(std::make_unique<Impl>())
+Server::Server(std::shared_ptr<Model> model)
+    : m_impl(std::make_unique<Impl>(std::move(model)))
 {}
 
 Server::~Server() = default;

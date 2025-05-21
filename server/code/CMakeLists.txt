@@ -18,8 +18,9 @@ target_sources(bl-llama-server
 target_link_libraries(bl-llama-server
     PUBLIC
         bl::bstl
-    PRIVATE
         bl::llama
+    PRIVATE
+        Boost::asio
         jalog::jalog
 )
 

@@ -2,3 +2,4 @@
 # SPDX-License-Identifier: MIT
 #
 add_subdirectory(code)
+bl_add_example_subdir()
