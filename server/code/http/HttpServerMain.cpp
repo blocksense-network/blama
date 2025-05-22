@@ -7,6 +7,8 @@
 #include <llama/Session.hpp>
 #include <llama/ControlVector.hpp>
 
+#include <server/Server.hpp>
+
 #include <jalog/Instance.hpp>
 #include <jalog/sinks/DefaultSink.hpp>
 
@@ -68,7 +70,8 @@ public:
 
 class Server {
 
-    bl::llama::Model m_model;
+    std::shared_ptr<bl::llama::Model> m_model;
+    bl::llama::server::Server m_server;
 
     static bool modelLoadProgressCallback(float progress) {
         const int barWidth = 50;
@@ -85,8 +88,9 @@ class Server {
     }
 public:
 
-    Server(const std::string& modelGguf) :
-        m_model(modelGguf, {}, modelLoadProgressCallback)
+    Server(const std::string& modelGguf)
+        : m_model(std::make_shared<bl::llama::Model>(modelGguf, bl::llama::Model::Params{}, modelLoadProgressCallback))
+        , m_server(m_model)
     {}
 
     net::awaitable<void> handleRequest(beast::tcp_stream stream) {
@@ -109,20 +113,18 @@ public:
             // TODO: instance pool
             // free instances can actually be stored in an ac-io channel, take one, then put it back
             // the channel itself gives us all the async ops (await, cb) to get and put an instance
-            bl::llama::Instance instance(m_model, {});
-
-            auto& session = instance.startSession({});
-
-            auto& vocab = m_model.vocab();
-            session.setInitialPrompt(vocab.tokenize(req.body(), true, true));
-
-            std::stringstream ss;
-            auto tokenStream = session.completeStream({
+            std::vector<bl::llama::server::Server::TokenData> tokenStream;
+            m_server.completeText({
+                .prompt = req.body(),
                 .maxTokens = 200
+            }, [&tokenStream](std::vector<bl::llama::server::Server::TokenData> resp) {
+                std::cout << "Response: " << resp.size() << "\n";
+                tokenStream = resp;
             });
 
-            while (auto p = tokenStream.complete()) {
-                ss << vocab.tokenToString(p.token);
+            std::stringstream ss;
+            for (auto& p : tokenStream) {
+                ss << m_model->vocab().tokenToString(p.tokenId);
             }
 
             // Prepare the response
@@ -161,7 +163,8 @@ int main() {
 
     bl::llama::initLibrary();
 
-    std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    // std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    std::string modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
 
     Server server(modelGguf);
 
