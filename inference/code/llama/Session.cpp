@@ -44,8 +44,8 @@ Session::Session(Instance& instance, llama_context* ctx, InitParams params)
     , m_ctx(ctx)
     , m_sampler(new Sampler(instance.model(), {
         .rngSeed = params.seed,
-        .temp = params.temperature,
         .topP = params.topP,
+        .temp = params.temperature,
         .grammar = params.grammar,
     }))
     , m_params(std::move(params))
