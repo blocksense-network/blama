@@ -40,5 +40,18 @@ int main() {
 
     bl::llama::server::Server srv(model);
 
+    bl::llama::server::Server::CompleteRequestParams req = {
+        .prompt = "The first man to",
+        .maxTokens = 10,
+    };
+
+    srv.completeText(req, [](std::vector<bl::llama::server::Server::TokenData> gen) {
+        for (auto& g : gen) {
+            std::cout << g.tokenStr;
+        }
+    });
+
+    std::cout << "\n";
+
     return 0;
 }
