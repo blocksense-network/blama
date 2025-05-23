@@ -128,13 +128,28 @@ public:
                 ss << g.tokenStr;
             }
 
+            nlohmann::json outJson;
+            outJson["text"] = ss.str();
+            auto& jsonTokens = outJson["tokenData"] = nlohmann::json::array();
+            for (auto& g : gen) {
+                auto& jt = jsonTokens.emplace_back();
+                jt["str"] = std::move(g.tokenStr);
+                jt["id"] = g.tokenId;
+                auto& jlg = jt["logits"] = nlohmann::json::array();
+                for (auto& l : g.logits) {
+                    auto& jl = jlg.emplace_back();
+                    jl["id"] = l.tokenId;
+                    jl["logit"] = l.logit;
+                }
+            }
+
             // Prepare the response
             http::response<http::string_body> res(http::status::ok, req.version());
             res.set(http::field::server, "Beast");
-            res.set(http::field::content_type, "text/plain");
+            res.set(http::field::content_type, "text/json");
             res.set(http::field::access_control_allow_origin, "*");
             res.keep_alive(req.keep_alive());
-            res.body() = ss.str();
+            res.body() = outJson.dump();
             res.prepare_payload();
 
             // Write the response
