@@ -2,5 +2,5 @@
 # SPDX-License-Identifier: MIT
 #
 if(NOT TARGET nlohmann_json::nlohmann_json)
-    CPMAddPackage(gh:nlohmann/json@3.11.3)
+    CPMAddPackage(gh:nlohmann/json@3.12.0)
 endif()

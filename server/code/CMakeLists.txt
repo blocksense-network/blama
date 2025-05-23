@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 bl_dep(boost)
+bl_dep(nl-json)
 
 ######################
 
@@ -37,5 +38,6 @@ target_link_libraries(blama-http-server PRIVATE
     jalog::jalog
     jalog::sinklib
     Boost::beast
+    nlohmann_json::nlohmann_json
     ac-test-data::llama
 )
