@@ -32,7 +32,7 @@ public:
     };
 
     struct TokenData {
-        std::string_view tokenStr;
+        std::string tokenStr;
         uint32_t tokenId = 0;
         struct LogitData {
             uint32_t tokenId = 0;

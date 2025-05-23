@@ -2,18 +2,25 @@
 // SPDX-License-Identifier: MIT
 //
 #include "Server.hpp"
+
 #include <llama/Model.hpp>
 #include <llama/Instance.hpp>
 #include <llama/Session.hpp>
 #include <llama/LogitComparer.hpp>
 
+
+
 namespace bl::llama::server {
 
 struct Server::Impl {
     std::shared_ptr<Model> m_model;
+    bl::llama::Instance m_instance;
     Impl(std::shared_ptr<Model> model)
         : m_model(std::move(model))
-    {}
+        , m_instance(*m_model, {})
+    {
+        m_instance.warmup();
+    }
 };
 
 Server::Server(std::shared_ptr<Model> model)
@@ -21,8 +28,8 @@ Server::Server(std::shared_ptr<Model> model)
 {}
 
 void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(std::vector<TokenData>)> cb) {
-    bl::llama::Instance instance(*m_impl->m_model, {});
-    instance.warmup();
+    auto& instance = m_impl->m_instance;
+
     auto& session = instance.startSession({
         .seed = params.seed,
         .temperature = params.temperature,
@@ -37,7 +44,7 @@ void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(st
     std::vector<TokenData> response;
     response.reserve(iRes.size());
     for (const auto& token : iRes) {
-        TokenData tokenData;
+        auto& tokenData = response.emplace_back();
         tokenData.tokenStr = m_impl->m_model->vocab().tokenToString(token.token);
         tokenData.tokenId = token.token;
         tokenData.logits.reserve(token.logits.size());
@@ -45,18 +52,17 @@ void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(st
             TokenData::LogitData logitData;
             logitData.tokenId = logit.token;
             logitData.logit = logit.logit;
-            tokenData.logits.push_back({ (uint32_t)logit.token, logit.logit });
+            tokenData.logits.push_back({(uint32_t)logit.token, logit.logit});
         }
-        response.push_back(tokenData);
     }
 
-    cb(response);
+    cb(std::move(response));
 
     instance.stopSession();
 }
 
 void Server::verify(CompleteRequestParams req, std::vector<TokenData> resp, itlib::ufunction<void(float)> cb) {
-        bl::llama::Instance instance(*m_impl->m_model, {});
+    auto& instance = m_impl->m_instance;
     instance.warmup();
     auto& session = instance.startSession({
         .seed = req.seed,
@@ -68,7 +74,7 @@ void Server::verify(CompleteRequestParams req, std::vector<TokenData> resp, itli
     std::vector<TokenPrediction> origPredictions;
     origPredictions.reserve(resp.size());
     for (const auto& token : resp) {
-        TokenPrediction tokenPrediction;
+        auto& tokenPrediction = origPredictions.emplace_back();
         tokenPrediction.token = token.tokenId;
         tokenPrediction.logits.reserve(token.logits.size());
         for (const auto& logit : token.logits) {
@@ -77,7 +83,6 @@ void Server::verify(CompleteRequestParams req, std::vector<TokenData> resp, itli
             logitData.logit = logit.logit;
             tokenPrediction.logits.push_back({ (int32_t)logit.tokenId, logit.logit });
         }
-        origPredictions.push_back(tokenPrediction);
     }
     auto verifierPredictions = session.fillCtx(origPredictions);
 
