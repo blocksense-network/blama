@@ -1,14 +1,25 @@
 require 'net/http'
 require 'json'
 
-req = {
+SERVER = 'http://localhost:7331'
+
+completeReq = {
     prompt: 'The first man to',
     max_tokens: 20
 }
 
-url = URI.parse 'http://localhost:7331/complete'
+puts "running..."
+result = Net::HTTP.post URI.parse(SERVER + '/complete'), JSON.generate(completeReq), 'Content-Type' => 'text/json'
 
-result = Net::HTTP.post url, JSON.generate(req), 'Content-Type' => 'text/json'
+p result.each_header.to_h
+puts result.body
 
+verifyReq = {
+    request: completeReq,
+    response: JSON::parse(result.body)
+}
+
+puts "verifying..."
+result = Net::HTTP.post URI.parse(SERVER + '/verify_completion'), JSON.generate(verifyReq), 'Content-Type' => 'text/json'
 p result.each_header.to_h
 puts result.body
