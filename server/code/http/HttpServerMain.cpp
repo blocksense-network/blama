@@ -12,6 +12,8 @@
 #include <jalog/Instance.hpp>
 #include <jalog/sinks/DefaultSink.hpp>
 
+#include <bstl/thread_runner.hpp>
+
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 
@@ -23,50 +25,6 @@ namespace net = boost::asio;
 using tcp = net::ip::tcp;
 namespace beast = boost::beast;
 namespace http = beast::http;
-
-class thread_runner {
-    std::vector<std::thread> m_threads; // would use jthread, but apple clang still doesn't support them
-public:
-    thread_runner() = default;
-
-    template <typename Ctx>
-    void start(Ctx& ctx, size_t n) {
-        assert(m_threads.empty());
-        if (!m_threads.empty()) return; // rescue
-        m_threads.reserve(n);
-        for (size_t i = 0; i < n; ++i) {
-            m_threads.push_back(std::thread([i, n, &ctx]() mutable {
-                (void)i;
-                (void)n;
-                ctx.run();
-            }));
-        }
-    }
-
-    void join() {
-        for (auto& t : m_threads) {
-            t.join();
-        }
-        m_threads.clear();
-    }
-
-    template <typename Ctx>
-    thread_runner(Ctx& ctx, size_t n) {
-        start(ctx, n);
-    }
-
-    ~thread_runner() {
-        join();
-    }
-
-    size_t num_threads() const noexcept {
-        return m_threads.size();
-    }
-
-    bool empty() const noexcept {
-        return m_threads.empty();
-    }
-};
 
 class Server {
 
@@ -171,7 +129,7 @@ int main() {
     net::io_context ioctx;
     auto guard = net::make_work_guard(ioctx);
 
-    thread_runner runner(ioctx, 4);
+    bstl::thread_runner runner(ioctx, 4);
 
     net::co_spawn(ioctx, server.listen(), net::detached);
 }

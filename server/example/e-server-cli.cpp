@@ -13,6 +13,7 @@
 #include "ac-test-data-llama-dir.h"
 
 #include <iostream>
+#include <latch>
 
 int main() {
     jalog::Instance jl;
@@ -45,12 +46,17 @@ int main() {
         .maxTokens = 10,
     };
 
-    srv.completeText(req, [](std::vector<bl::llama::server::Server::TokenData> gen) {
-        for (auto& g : gen) {
-            std::cout << g.tokenStr;
-        }
+    std::latch latch(1);
+    std::vector<bl::llama::server::Server::TokenData> generatedTokens;
+    srv.completeText(req, [&](std::vector<bl::llama::server::Server::TokenData> gen) {
+        generatedTokens = std::move(gen);
+        latch.count_down();
     });
 
+    latch.wait();
+    for (auto& g : generatedTokens) {
+        std::cout << g.tokenStr;
+    }
     std::cout << "\n";
 
     return 0;
