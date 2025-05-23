@@ -41,9 +41,11 @@ public:
         std::vector<LogitData> logits;
     };
 
-    void completeText(CompleteRequestParams params, itlib::ufunction<void(std::vector<TokenData>)> cb);
+    using CompleteReponse = std::vector<TokenData>;
 
-    void verify(CompleteRequestParams req, std::vector<TokenData> resp, itlib::ufunction<void(float)> cb);
+    void completeText(CompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb);
+
+    void verify(CompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb);
 
 private:
     struct Impl;

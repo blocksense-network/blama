@@ -41,20 +41,20 @@ struct Server::Impl {
         m_wg.reset();
     }
 
-    void completeText(CompleteRequestParams params, itlib::ufunction<void(std::vector<TokenData>)> cb) {
+    void completeText(CompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb) {
         post(m_ioctx, [this, movecap(params, cb)] {
             auto& session = m_instance.startSession({
                 .seed = params.seed,
                 .temperature = params.temperature,
                 .topP = params.topP
-            });
+                });
             session.setInitialPrompt(m_model->vocab().tokenize(params.prompt, true, true));
             auto iRes = session.complete({
                 .prompt = m_model->vocab().tokenize(params.prompt, true, true),
                 .maxTokens = (int32_t)params.maxTokens
-            });
+                });
 
-            std::vector<TokenData> response;
+            CompleteReponse response;
             response.reserve(iRes.size());
             for (const auto& token : iRes) {
                 auto& tokenData = response.emplace_back();
@@ -75,13 +75,13 @@ struct Server::Impl {
         });
     }
 
-    void verify(CompleteRequestParams req, std::vector<TokenData> resp, itlib::ufunction<void(float)> cb) {
+    void verify(CompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb) {
         post(m_ioctx, [this, movecap(req, resp, cb)] {
             auto& session = m_instance.startSession({
                 .seed = req.seed,
                 .temperature = req.temperature,
                 .topP = req.topP
-            });
+                });
 
             session.setInitialPrompt(m_model->vocab().tokenize(req.prompt, true, true));
             std::vector<TokenPrediction> origPredictions;
@@ -114,13 +114,14 @@ struct Server::Impl {
 
 Server::Server(std::shared_ptr<Model> model)
     : m_impl(std::make_unique<Impl>(std::move(model)))
-{}
+{
+}
 
-void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(std::vector<TokenData>)> cb) {
+void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb) {
     m_impl->completeText(std::move(params), std::move(cb));
 }
 
-void Server::verify(CompleteRequestParams req, std::vector<TokenData> resp, itlib::ufunction<void(float)> cb) {
+void Server::verify(CompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb) {
     m_impl->verify(std::move(req), std::move(resp), std::move(cb));
 }
 

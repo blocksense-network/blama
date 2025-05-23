@@ -70,7 +70,7 @@ class Server {
         template <typename Self>
         void operator()(Self& self) {
             auto takeParams = bstl::move(params);
-            server.completeText(bstl::move(takeParams), [ex = bstl::move(ex), self = bstl::move(self)](std::vector<bl::llama::server::Server::TokenData> gen) mutable {
+            server.completeText(bstl::move(takeParams), [ex = bstl::move(ex), self = bstl::move(self)](bl::llama::server::Server::CompleteReponse gen) mutable {
                 post(ex, [self = bstl::move(self), gen = bstl::move(gen)]() mutable {
                     self.complete(bstl::move(gen));
                 });
@@ -79,8 +79,8 @@ class Server {
     };
 
     decltype(auto) asyncComplete(net::any_io_executor ex, bl::llama::server::Server::CompleteRequestParams params) {
-        return net::async_compose<const net::use_awaitable_t<>, void(std::vector<bl::llama::server::Server::TokenData>)>(
-            AsyncCompleteOp{ .ex = ex, .server = m_server, .params = std::move(params) }, net::use_awaitable, ex
+        return net::async_compose<const net::use_awaitable_t<>, void(bl::llama::server::Server::CompleteReponse)>(
+            AsyncCompleteOp{.ex = ex, .server = m_server, .params = std::move(params)}, net::use_awaitable, ex
         );
     }
 public:
