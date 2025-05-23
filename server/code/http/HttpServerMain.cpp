@@ -11,6 +11,7 @@
 
 #include <jalog/Instance.hpp>
 #include <jalog/sinks/DefaultSink.hpp>
+#include <jalog/Log.hpp>
 
 #include <bstl/thread_runner.hpp>
 #include <bstl/iile.h>
@@ -246,14 +247,26 @@ public:
 
 };
 
-int main() {
+int main(int argc, char* argv[]) {
     jalog::Instance jl;
     jl.setup().async().add<jalog::sinks::DefaultSink>();
 
     bl::llama::initLibrary();
 
-    std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-    //std::string modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
+    std::string modelGguf;
+    if (argc == 1) {
+        modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+        // modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
+    }
+    else if (argc == 2) {
+        modelGguf = argv[1];
+    }
+    else {
+        std::cerr << "Usage: " << argv[0] << " [model.gguf]" << std::endl;
+        return 1;
+    }
+
+    JALOG(Info, "Loading ", modelGguf);
 
     Server server(modelGguf);
 
