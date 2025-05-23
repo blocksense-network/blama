@@ -13,11 +13,16 @@
 #include <jalog/sinks/DefaultSink.hpp>
 
 #include <bstl/thread_runner.hpp>
+#include <bstl/iile.h>
+#include <bstl/move.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include <iostream>
+#include <concepts>
 
 #include "ac-test-data-llama-dir.h"
 
@@ -27,7 +32,6 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 
 class Server {
-
     std::shared_ptr<bl::llama::Model> m_model;
     bl::llama::server::Server m_server;
 
@@ -43,6 +47,41 @@ class Server {
             std::cout << '\n';
         }
         return true;
+    }
+
+    template <typename T>
+    static void opt_get(nlohmann::json& dict, std::string_view key, T& value) {
+        auto it = dict.find(key);
+        if (it != dict.end()) {
+            if constexpr(std::same_as<T, std::string>) {
+                value = it->get_ref<std::string&>();
+            }
+            else {
+                value = it->get<T>();
+            }
+        }
+    }
+
+    struct AsyncCompleteOp {
+        net::any_io_executor ex;
+        bl::llama::server::Server& server;
+        bl::llama::server::Server::CompleteRequestParams params;
+
+        template <typename Self>
+        void operator()(Self& self) {
+            auto takeParams = bstl::move(params);
+            server.completeText(bstl::move(takeParams), [ex = bstl::move(ex), self = bstl::move(self)](std::vector<bl::llama::server::Server::TokenData> gen) mutable {
+                post(ex, [self = bstl::move(self), gen = bstl::move(gen)]() mutable {
+                    self.complete(bstl::move(gen));
+                });
+            });
+        }
+    };
+
+    decltype(auto) asyncComplete(net::any_io_executor ex, bl::llama::server::Server::CompleteRequestParams params) {
+        return net::async_compose<const net::use_awaitable_t<>, void(std::vector<bl::llama::server::Server::TokenData>)>(
+            AsyncCompleteOp{ .ex = ex, .server = m_server, .params = std::move(params) }, net::use_awaitable, ex
+        );
     }
 public:
 
@@ -68,21 +107,25 @@ public:
             co_await http::async_write(stream, res, net::use_awaitable);
         }
         else {
-            // TODO: instance pool
-            // free instances can actually be stored in an ac-io channel, take one, then put it back
-            // the channel itself gives us all the async ops (await, cb) to get and put an instance
-            std::vector<bl::llama::server::Server::TokenData> tokenStream;
-            m_server.completeText({
-                .prompt = req.body(),
-                .maxTokens = 200
-            }, [&tokenStream](std::vector<bl::llama::server::Server::TokenData> resp) {
-                std::cout << "Response: " << resp.size() << "\n";
-                tokenStream = resp;
+            auto params = iile([&]() {
+                auto json = nlohmann::json::parse(req.body());
+
+                bl::llama::server::Server::CompleteRequestParams params;
+                params.prompt = bstl::move(json["prompt"].get_ref<std::string&>());
+                opt_get(json, "max_tokens", params.maxTokens);
+                opt_get(json, "seed", params.seed);
+                opt_get(json, "suffix", params.suffix);
+                opt_get(json, "temp", params.temperature);
+                opt_get(json, "top_p", params.topP);
+                return params;
             });
 
-            std::stringstream ss;
-            for (auto& p : tokenStream) {
-                ss << m_model->vocab().tokenToString(p.tokenId);
+            auto ex = co_await net::this_coro::executor;
+            auto gen = co_await asyncComplete(ex, std::move(params));
+
+            std::ostringstream ss;
+            for (auto& g : gen) {
+                ss << g.tokenStr;
             }
 
             // Prepare the response
@@ -109,7 +152,7 @@ public:
 
         while (true) {
             auto sock = co_await acc.async_accept(net::use_awaitable);
-            net::co_spawn(ex, handleRequest(beast::tcp_stream(std::move(sock))), net::detached);
+            net::co_spawn(ex, handleRequest(beast::tcp_stream(bstl::move(sock))), net::detached);
         }
     }
 
@@ -121,8 +164,8 @@ int main() {
 
     bl::llama::initLibrary();
 
-    // std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-    std::string modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
+    std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    //std::string modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
 
     Server server(modelGguf);
 
