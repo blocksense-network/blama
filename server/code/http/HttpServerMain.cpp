@@ -375,8 +375,7 @@ int main(int argc, char* argv[]) {
 
     std::string modelGguf;
     if (argc == 1) {
-        // modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-        modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
+        modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
     }
     else if (argc == 2) {
         modelGguf = argv[1];
