@@ -7,7 +7,6 @@
 #include <cassert>
 
 // run an asio-like context in multiple threads
-
 namespace bstl {
 class thread_runner {
     std::vector<std::thread> m_threads; // would use jthread, but apple clang still doesn't support them
@@ -21,6 +20,7 @@ public:
         m_threads.reserve(n);
         for (size_t i = 0; i < n; ++i) {
             m_threads.push_back(std::thread([i, n, &ctx]() mutable {
+                (void)i;(void)n; // unused
                 ctx.run();
             }));
         }
