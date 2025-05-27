@@ -50,7 +50,7 @@ struct Server::Impl {
                 });
             session.setInitialPrompt(m_model->vocab().tokenize(params.prompt, true, true));
             auto iRes = session.complete({
-                .prompt = m_model->vocab().tokenize(params.prompt, true, true),
+                .prompt = std::vector<bl::llama::Token>(),
                 .maxTokens = (int32_t)params.maxTokens
                 });
 
