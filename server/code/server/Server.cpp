@@ -7,6 +7,7 @@
 #include <llama/Instance.hpp>
 #include <llama/Session.hpp>
 #include <llama/LogitComparer.hpp>
+#include <llama/ChatFormat.hpp>
 
 #include <bstl/thread_runner.hpp>
 #include <bstl/move_capture.hpp>
@@ -75,6 +76,54 @@ struct Server::Impl {
         });
     }
 
+    void chatComplete(ChatCompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb) {
+        post(m_ioctx, [this, movecap(params, cb)] {
+            auto& session = m_instance.startSession({
+                .seed = params.seed,
+                .temperature = params.temperature,
+                .topP = params.topP
+                });
+
+            auto modelChatParams = llama::ChatFormat::getChatParams(*m_model);
+            auto chatFormat = llama::ChatFormat(modelChatParams);
+
+            std::vector<ChatMsg> chatMsgs;
+            for (const auto& message : params.messages) {
+                chatMsgs.push_back({
+                    .role = message.role,
+                    .text = message.content
+                });
+            }
+            auto fmt = chatFormat.formatChat(chatMsgs, true);
+            std::vector<Token> promptTokens = m_model->vocab().tokenize(fmt, true, true);
+            session.setInitialPrompt(promptTokens);
+
+            auto iRes = session.complete({
+                .prompt = {},
+                .maxTokens = (int32_t)params.maxTokens
+            });
+
+            CompleteReponse response;
+            response.reserve(iRes.size());
+            for (const auto& token : iRes) {
+                auto& tokenData = response.emplace_back();
+                tokenData.tokenStr = m_model->vocab().tokenToString(token.token);
+                tokenData.tokenId = token.token;
+                tokenData.logits.reserve(token.logits.size());
+                for (const auto& logit : token.logits) {
+                    TokenData::LogitData logitData;
+                    logitData.tokenId = logit.token;
+                    logitData.logit = logit.logit;
+                    tokenData.logits.push_back({ (uint32_t)logit.token, logit.logit });
+                }
+            }
+
+            cb(std::move(response));
+
+            m_instance.stopSession();
+        });
+    }
+
     void verify(CompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb) {
         post(m_ioctx, [this, movecap(req, resp, cb)] {
             auto& session = m_instance.startSession({
@@ -110,12 +159,60 @@ struct Server::Impl {
             m_instance.stopSession();
         });
     }
+
+    void chatVerify(ChatCompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb) {
+        post(m_ioctx, [this, movecap(req, resp, cb)] {
+            auto& session = m_instance.startSession({
+                .seed = req.seed,
+                .temperature = req.temperature,
+                .topP = req.topP
+                });
+
+            auto modelChatParams = llama::ChatFormat::getChatParams(*m_model);
+            auto chatFormat = llama::ChatFormat(modelChatParams);
+
+            std::vector<ChatMsg> chatMsgs;
+            for (const auto& message : req.messages) {
+                chatMsgs.push_back({
+                    .role = message.role,
+                    .text = message.content
+                });
+            }
+            auto fmt = chatFormat.formatChat(chatMsgs, true);
+            std::vector<Token> promptTokens = m_model->vocab().tokenize(fmt, true, true);
+            session.setInitialPrompt(promptTokens);
+
+            std::vector<TokenPrediction> origPredictions;
+            origPredictions.reserve(resp.size());
+            for (const auto& token : resp) {
+                auto& tokenPrediction = origPredictions.emplace_back();
+                tokenPrediction.token = token.tokenId;
+                tokenPrediction.logits.reserve(token.logits.size());
+                for (const auto& logit : token.logits) {
+                    TokenData::LogitData logitData;
+                    logitData.tokenId = logit.tokenId;
+                    logitData.logit = logit.logit;
+                    tokenPrediction.logits.push_back({ (int32_t)logit.tokenId, logit.logit });
+                }
+            }
+            auto verifierPredictions = session.fillCtx(origPredictions);
+
+            bl::llama::MetricsAggregator metricsAgg;
+            float score = 0;
+            for (size_t i = 0; i < origPredictions.size(); i++) {
+                auto m = bl::llama::LogitComparer::compare(origPredictions[i].logits, verifierPredictions[i].logits);
+                score = metricsAgg.pushAndVerify({ &m, 1 });
+            }
+            cb(score);
+
+            m_instance.stopSession();
+        });
+    }
 };
 
 Server::Server(std::shared_ptr<Model> model)
     : m_impl(std::make_unique<Impl>(std::move(model)))
-{
-}
+{}
 
 void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb) {
     m_impl->completeText(std::move(params), std::move(cb));
@@ -123,6 +220,14 @@ void Server::completeText(CompleteRequestParams params, itlib::ufunction<void(Co
 
 void Server::verify(CompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb) {
     m_impl->verify(std::move(req), std::move(resp), std::move(cb));
+}
+
+void Server::chatComplete(ChatCompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb) {
+    m_impl->chatComplete(std::move(params), std::move(cb));
+}
+
+void Server::chatVerify(ChatCompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb) {
+    m_impl->chatVerify(std::move(req), std::move(resp), std::move(cb));
 }
 
 Server::~Server() = default;

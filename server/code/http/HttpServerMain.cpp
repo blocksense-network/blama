@@ -91,9 +91,37 @@ bl::llama::server::Server::CompleteRequestParams toCompleteParams(nlohmann::json
     return params;
 }
 
+bl::llama::server::Server::ChatCompleteRequestParams toChatCompleteParams(nlohmann::json& json) {
+    bl::llama::server::Server::ChatCompleteRequestParams params;
+    if (json.contains("messages") && json["messages"].is_array()) {
+        params.messages.reserve(json["messages"].size());
+        for (const auto& messageJson : json["messages"]) {
+            bl::llama::server::Server::ChatCompleteRequestParams::Message msg;
+            // Assuming Message has role and content fields
+            if (messageJson.contains("role")) {
+                msg.role = messageJson["role"].get<std::string>();
+            }
+            if (messageJson.contains("content")) {
+                msg.content = messageJson["content"].get<std::string>();
+            }
+            params.messages.push_back(std::move(msg));
+        }
+    }
+    opt_get(json, "max_tokens", params.maxTokens);
+    opt_get(json, "seed", params.seed);
+    opt_get(json, "temp", params.temperature);
+    opt_get(json, "top_p", params.topP);
+    return params;
+}
+
 bl::llama::server::Server::CompleteRequestParams toCompleteParams(std::string_view jsonStr) {
     auto json = nlohmann::json::parse(jsonStr);
     return toCompleteParams(json);
+}
+
+bl::llama::server::Server::ChatCompleteRequestParams toChatCompleteParams(std::string_view jsonStr) {
+    auto json = nlohmann::json::parse(jsonStr);
+    return toChatCompleteParams(json);
 }
 
 class Server {
@@ -140,51 +168,124 @@ class Server {
         return true;
     }
 
+    template <typename T>
     struct AsyncCompleteOp {
         net::any_io_executor ex;
         bl::llama::server::Server& server;
-        bl::llama::server::Server::CompleteRequestParams params;
+        T params;
 
         template <typename Self>
         void operator()(Self& self) {
             auto takeParams = bstl::move(params);
-            server.completeText(bstl::move(takeParams), [ex = bstl::move(ex), self = bstl::move(self)](bl::llama::server::Server::CompleteReponse gen) mutable {
-                post(ex, [self = bstl::move(self), gen = bstl::move(gen)]() mutable {
-                    self.complete(bstl::move(gen));
+            if constexpr (std::is_same_v<T, bl::llama::server::Server::CompleteRequestParams>) {
+                server.completeText(bstl::move(takeParams), [ex = bstl::move(ex), self = bstl::move(self)](bl::llama::server::Server::CompleteReponse gen) mutable {
+                    post(ex, [self = bstl::move(self), gen = bstl::move(gen)]() mutable {
+                        self.complete(bstl::move(gen));
+                    });
                 });
-            });
+            } else if constexpr (std::is_same_v<T, bl::llama::server::Server::ChatCompleteRequestParams>) {
+                server.chatComplete(bstl::move(takeParams), [ex = bstl::move(ex), self = bstl::move(self)](bl::llama::server::Server::CompleteReponse gen) mutable {
+                    post(ex, [self = bstl::move(self), gen = bstl::move(gen)]() mutable {
+                        self.complete(bstl::move(gen));
+                    });
+                });
+            } else {
+                static_assert(false, "Unsupported parameter type for AsyncCompleteOp");
+            }
         }
     };
 
     decltype(auto) asyncComplete(net::any_io_executor ex, bl::llama::server::Server::CompleteRequestParams params) {
         return net::async_compose<const net::use_awaitable_t<>, void(bl::llama::server::Server::CompleteReponse)>(
-            AsyncCompleteOp{.ex = ex, .server = m_server, .params = std::move(params)}, net::use_awaitable, ex
+            AsyncCompleteOp<bl::llama::server::Server::CompleteRequestParams>{.ex = ex, .server = m_server, .params = std::move(params)}, net::use_awaitable, ex
         );
     }
 
+    decltype(auto) asyncChatComplete(net::any_io_executor ex, bl::llama::server::Server::ChatCompleteRequestParams params) {
+        return net::async_compose<const net::use_awaitable_t<>, void(bl::llama::server::Server::CompleteReponse)>(
+            AsyncCompleteOp<bl::llama::server::Server::ChatCompleteRequestParams>{.ex = ex, .server = m_server, .params = std::move(params)}, net::use_awaitable, ex
+        );
+    }
+
+    template <typename T>
     struct AsyncVerifyOp {
         net::any_io_executor ex;
         bl::llama::server::Server& server;
-        bl::llama::server::Server::CompleteRequestParams params;
+        T params;
         bl::llama::server::Server::CompleteReponse response;
 
         template <typename Self>
         void operator()(Self& self) {
             auto takeParams = bstl::move(params);
             auto takeResponse = bstl::move(response);
-            server.verify(bstl::move(takeParams), bstl::move(takeResponse), [ex = bstl::move(ex), self = bstl::move(self)](float result) mutable {
-                post(ex, [self = bstl::move(self), result]() mutable {
-                    self.complete(result);
+
+            if constexpr (std::is_same_v<T, bl::llama::server::Server::CompleteRequestParams>) {
+                server.verify(bstl::move(takeParams), bstl::move(takeResponse), [ex = bstl::move(ex), self = bstl::move(self)](float result) mutable {
+                    post(ex, [self = bstl::move(self), result]() mutable {
+                        self.complete(result);
+                    });
                 });
-            });
+            } else if constexpr (std::is_same_v<T, bl::llama::server::Server::ChatCompleteRequestParams>) {
+                server.chatVerify(bstl::move(takeParams), bstl::move(takeResponse), [ex = bstl::move(ex), self = bstl::move(self)](float result) mutable {
+                    post(ex, [self = bstl::move(self), result]() mutable {
+                        self.complete(result);
+                    });
+                });
+            } else {
+                static_assert(false, "Unsupported parameter type for AsyncCompleteOp");
+            }
         }
     };
 
     decltype(auto) asyncVerify(net::any_io_executor ex, bl::llama::server::Server::CompleteRequestParams params, bl::llama::server::Server::CompleteReponse response) {
         return net::async_compose<const net::use_awaitable_t<>, void(float)>(
-            AsyncVerifyOp{.ex = ex, .server = m_server, .params = std::move(params), .response = std::move(response)}, net::use_awaitable, ex
+            AsyncVerifyOp<bl::llama::server::Server::CompleteRequestParams>{.ex = ex, .server = m_server, .params = std::move(params), .response = std::move(response)}, net::use_awaitable, ex
         );
     }
+
+    decltype(auto) asyncChatVerify(net::any_io_executor ex, bl::llama::server::Server::ChatCompleteRequestParams params, bl::llama::server::Server::CompleteReponse response) {
+        return net::async_compose<const net::use_awaitable_t<>, void(float)>(
+            AsyncVerifyOp<bl::llama::server::Server::ChatCompleteRequestParams>{.ex = ex, .server = m_server, .params = std::move(params), .response = std::move(response)}, net::use_awaitable, ex
+        );
+    }
+
+    template <typename T>
+    decltype(auto) getCompleteResponse(T& gen, const http::request<http::string_body>& req) {
+        std::ostringstream ss;
+        for (auto& g : gen) {
+            ss << g.tokenStr;
+        }
+
+        nlohmann::json outJson;
+        outJson["text"] = ss.str();
+        outJson["tokenData"] = toJson(gen);
+
+        // Prepare the response
+        http::response<http::string_body> res(http::status::ok, req.version());
+        res.set(http::field::server, "Beast");
+        res.set(http::field::content_type, "text/json");
+        res.set(http::field::access_control_allow_origin, "*");
+        res.keep_alive(req.keep_alive());
+        res.body() = outJson.dump();
+        res.prepare_payload();
+
+        return res;
+    }
+
+    template <typename T>
+    decltype(auto) getVerifyResponse(T& verifyResult, const http::request<http::string_body>& req) {
+        http::response<http::string_body> res(http::status::ok, req.version());
+        res.set(http::field::server, "Beast");
+        res.set(http::field::content_type, "text/json");
+        res.set(http::field::access_control_allow_origin, "*");
+        res.keep_alive(req.keep_alive());
+        res.body() = nlohmann::json({{"result", verifyResult}}).dump();
+        res.prepare_payload();
+
+        return res;
+    }
+
+
 public:
 
     Server(const std::string& modelGguf)
@@ -209,24 +310,15 @@ public:
             auto params = toCompleteParams(req.body());
 
             auto gen = co_await asyncComplete(ex, std::move(params));
+            auto res = getCompleteResponse(gen, req);
+            // Write the response
+            co_await http::async_write(stream, res, net::use_awaitable);
+        }
+        else if(req.target() == "/chat/completions") {
+            auto params = toChatCompleteParams(req.body());
 
-            std::ostringstream ss;
-            for (auto& g : gen) {
-                ss << g.tokenStr;
-            }
-
-            nlohmann::json outJson;
-            outJson["text"] = ss.str();
-            outJson["tokenData"] = toJson(gen);
-
-            // Prepare the response
-            http::response<http::string_body> res(http::status::ok, req.version());
-            res.set(http::field::server, "Beast");
-            res.set(http::field::content_type, "text/json");
-            res.set(http::field::access_control_allow_origin, "*");
-            res.keep_alive(req.keep_alive());
-            res.body() = outJson.dump();
-            res.prepare_payload();
+            auto gen = co_await asyncChatComplete(ex, std::move(params));
+            auto res = getCompleteResponse(gen, req);
 
             // Write the response
             co_await http::async_write(stream, res, net::use_awaitable);
@@ -237,15 +329,18 @@ public:
             auto rrsp = toCompleteResponse(json["response"]);
 
             auto verifyResult = co_await asyncVerify(ex, std::move(rreq), std::move(rrsp));
+            auto res = getVerifyResponse(verifyResult, req);
 
-            // Prepare the response
-            http::response<http::string_body> res(http::status::ok, req.version());
-            res.set(http::field::server, "Beast");
-            res.set(http::field::content_type, "text/json");
-            res.set(http::field::access_control_allow_origin, "*");
-            res.keep_alive(req.keep_alive());
-            res.body() = nlohmann::json({{"result", verifyResult}}).dump();
-            res.prepare_payload();
+            // Write the response
+            co_await http::async_write(stream, res, net::use_awaitable);
+        }
+        else if (req.target() == "/chat/verify_completion") {
+            auto json = nlohmann::json::parse(req.body());
+            auto rreq = toChatCompleteParams(json["request"]);
+            auto rrsp = toCompleteResponse(json["response"]);
+
+            auto verifyResult = co_await asyncChatVerify(ex, std::move(rreq), std::move(rrsp));
+            auto res = getVerifyResponse(verifyResult, req);
 
             // Write the response
             co_await http::async_write(stream, res, net::use_awaitable);
@@ -259,7 +354,6 @@ public:
         // Close the stream
         stream.socket().shutdown(tcp::socket::shutdown_send);
     }
-
 
     net::awaitable<void> listen() {
         auto ex = co_await net::this_coro::executor;

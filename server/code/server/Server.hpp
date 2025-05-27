@@ -31,6 +31,18 @@ public:
         float topP = 0.95f;
     };
 
+    struct ChatCompleteRequestParams {
+        struct Message {
+            std::string role; // "user", "assistant", or "system"
+            std::string content;
+        };
+        std::vector<Message> messages;
+        uint32_t maxTokens = 0;
+        uint32_t seed = 0;
+        float temperature = 0.8f;
+        float topP = 0.95f;
+    };
+
     struct TokenData {
         std::string tokenStr;
         uint32_t tokenId = 0;
@@ -45,7 +57,11 @@ public:
 
     void completeText(CompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb);
 
+    void chatComplete(ChatCompleteRequestParams params, itlib::ufunction<void(CompleteReponse)> cb);
+
     void verify(CompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb);
+
+    void chatVerify(ChatCompleteRequestParams req, CompleteReponse resp, itlib::ufunction<void(float)> cb);
 
 private:
     struct Impl;
