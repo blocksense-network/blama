@@ -101,16 +101,42 @@ class Server {
     bl::llama::server::Server m_server;
 
     static bool modelLoadProgressCallback(float progress) {
+        static bool initialized = false;
         const int barWidth = 50;
-        static float currProgress = 0;
-        auto delta = int(progress * barWidth) - int(currProgress * barWidth);
-        for (int i = 0; i < delta; i++) {
-            std::cout.put('=');
+
+        // Clamp progress
+        progress = std::max(0.0f, std::min(1.0f, progress));
+
+        if (!initialized) {
+            std::cout << "Loading: ";
+            initialized = true;
         }
-        currProgress = progress;
-        if (progress == 1.f) {
-            std::cout << '\n';
+
+        // Clear current line and move cursor to start
+        std::cout << '\r';
+
+        // Build progress bar
+        std::cout << "Loading: [";
+        int filled = static_cast<int>(progress * barWidth);
+
+        for (int i = 0; i < barWidth; i++) {
+            if (i < filled) {
+                std::cout << '=';
+            } else if (i == filled && progress < 1.0f) {
+                std::cout << '>';
+            } else {
+                std::cout << ' ';
+            }
         }
+
+        std::cout << "] " << std::setw(3) << static_cast<int>(progress * 100) << '%';
+        std::cout.flush();
+
+        if (progress >= 1.0f) {
+            std::cout << " - Complete!\n";
+            initialized = false; // Reset for next use
+        }
+
         return true;
     }
 
@@ -255,8 +281,8 @@ int main(int argc, char* argv[]) {
 
     std::string modelGguf;
     if (argc == 1) {
-        modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-        // modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
+        // modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+        modelGguf = "/Users/pacominev/repos/ac/ac-dev/ilib-llama.cpp/tmp/Meta-Llama-3.1-8B-Instruct-Q5_K_S.gguf";
     }
     else if (argc == 2) {
         modelGguf = argv[1];
