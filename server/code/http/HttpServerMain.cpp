@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025 Schelling Point Ventures Inc.
 // SPDX-License-Identifier: MIT
 //
+#include <cstring>
 #include <llama/Init.hpp>
 #include <llama/Model.hpp>
 #include <llama/Instance.hpp>
@@ -31,6 +32,7 @@ namespace net = boost::asio;
 using tcp = net::ip::tcp;
 namespace beast = boost::beast;
 namespace http = beast::http;
+namespace fs = std::filesystem;
 
 nlohmann::json toJson(bl::llama::server::Server::CompleteReponse& gen) {
     auto jsonTokens = nlohmann::json::array();
@@ -373,55 +375,52 @@ int main(int argc, char* argv[]) {
 
     bl::llama::initLibrary();
 
-    // --- Configuration with Defaults ---
+    // Default values
     std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
-    net::ip::port_type port = 7331; // Default port
+    net::ip::port_type port = 7331;
 
-    // --- Read Port from Environment Variable (Fallback) ---
-    const char* port_env = std::getenv("PORT");
+    const char* port_env = std::getenv("BLAMA_PORT");
     if (port_env) {
-        try {
-            port = std::stoi(port_env);
-        } catch (const std::invalid_argument& e) {
-            JALOG(Error, "Warning: Invalid PORT environment variable '", port_env, "'. Using default port ", port, ".");
-        } catch (const std::out_of_range& e) {
-            JALOG(Error, "Warning: PORT environment variable '", port_env, "' is out of range. Using default port ", port, ".");
+        size_t idx = 0;
+        unsigned long value = std::stoul(port_env, &idx, 10);
+
+        if (idx != std::strlen(port_env)) {
+            throw std::invalid_argument("Extra characters after BLAMA_PORT number");
         }
-    }
 
-    // Parse `--port` argument (popping it out if found)
-    std::vector<std::string> args(argv + 1, argv + argc);
-    for (size_t i = 0; i < args.size(); ++i) {
-        if (args[i] == "--port") {
-            if (i + 1 < args.size()) {
-                try {
-                    port = std::stoi(args[i + 1]);
-                    // Erase the flag and its value so the positional argument logic still works
-                    args.erase(args.begin() + i, args.begin() + i + 2);
-                    --i; // Decrement i to re-evaluate the new element at the current position
-                } catch (const std::invalid_argument& e) {
-                    JALOG(Error, "Error: Invalid argument for --port. Please provide a valid number.");
-                    return 1;
-                } catch (const std::out_of_range& e) {
-                    JALOG(Error, "Error: Port number is out of the valid range.");
-                    return 1;
-                }
-            } else {
-                JALOG(Error, "Error: --port flag requires an argument.");
-                return 1;
-            }
+        if (value > std::numeric_limits<net::ip::port_type>::max()) {
+            throw std::out_of_range("Value exceeds uint16_t max");
         }
+
+        port = static_cast<net::ip::port_type>(value);;
     }
 
-    // Handle positional argument for model path
-    if (args.size() == 1) {
-        modelGguf = args[0];
-    } else if (args.size() > 1) {
-        std::cerr << "Usage: " << argv[0] << " [--port <port>] [model.gguf]" << std::endl;
-        return 1;
+    const char* model_env = std::getenv("BLAMA_MODEL");
+    if (model_env) {
+        if (!model_env || std::string(model_env).empty()) {
+            throw std::runtime_error(std::string("Environment variable not set or empty: ") + model_env);
+        }
+
+        std::string modelPathString(model_env);
+
+        if (!modelPathString.ends_with(".gguf")) {
+            throw std::runtime_error(std::string("BLAMA_MODEL does not end with .gguf: ") + modelPathString);
+        }
+
+        fs::path model_path(modelPathString);
+
+        if (!fs::exists(model_path)) {
+            throw std::runtime_error("BLAMA_MODEL does not exist: " + modelPathString);
+        }
+
+        if (!fs::is_regular_file(model_path)) {
+            throw std::runtime_error("BLAMA_MODEL is not a regular file: " + modelPathString);
+        }
+
+        modelGguf = modelPathString;
     }
 
-    JALOG(Info, "Loading ", modelGguf);
+    JALOG(Info, "Loading model ", modelGguf);
     JALOG(Info, "Listening on port ", port);
 
     Server server(modelGguf);
