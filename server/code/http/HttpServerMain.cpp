@@ -357,9 +357,9 @@ public:
         stream.socket().shutdown(tcp::socket::shutdown_send);
     }
 
-    net::awaitable<void> listen(net::ip::port_type port) {
+    net::awaitable<void> listen(const boost::asio::ip::address &addr, net::ip::port_type port) {
         auto ex = co_await net::this_coro::executor;
-        tcp::acceptor acc(ex, tcp::endpoint(tcp::v4(), port));
+        tcp::acceptor acc(ex, tcp::endpoint(addr, port));
 
         while (true) {
             auto sock = co_await acc.async_accept(net::use_awaitable);
@@ -377,7 +377,21 @@ int main(int argc, char* argv[]) {
 
     // Default values
     std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    boost::asio::ip::address host = boost::asio::ip::make_address("0.0.0.0");
     net::ip::port_type port = 7331;
+
+    const char* host_env = std::getenv("BLAMA_HOST");
+    if (host_env) {
+        try {
+            host = boost::asio::ip::make_address(host_env);
+        } catch (const boost::exception &e) {
+            // TODO: have to link against `Boost::exception` in `../CMakeLists.txt` somehow
+            // std::string diag = boost::exception_detail::get_diagnostic_information(
+            //     e, "Invalid BLAMA_HOST");
+            // throw std::invalid_argument(diag);
+            throw std::invalid_argument("Invalid BLAMA_HOST");
+        }
+    }
 
     const char* port_env = std::getenv("BLAMA_PORT");
     if (port_env) {
@@ -430,5 +444,5 @@ int main(int argc, char* argv[]) {
 
     bstl::thread_runner runner(ioctx, 4);
 
-    net::co_spawn(ioctx, server.listen(port), net::detached);
+    net::co_spawn(ioctx, server.listen(host, port), net::detached);
 }
