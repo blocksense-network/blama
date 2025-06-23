@@ -355,9 +355,9 @@ public:
         stream.socket().shutdown(tcp::socket::shutdown_send);
     }
 
-    net::awaitable<void> listen() {
+    net::awaitable<void> listen(net::ip::port_type port) {
         auto ex = co_await net::this_coro::executor;
-        tcp::acceptor acc(ex, tcp::endpoint(tcp::v4(), 7331));
+        tcp::acceptor acc(ex, tcp::endpoint(tcp::v4(), port));
 
         while (true) {
             auto sock = co_await acc.async_accept(net::use_awaitable);
@@ -373,19 +373,56 @@ int main(int argc, char* argv[]) {
 
     bl::llama::initLibrary();
 
-    std::string modelGguf;
-    if (argc == 1) {
-        modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    // --- Configuration with Defaults ---
+    std::string modelGguf = AC_TEST_DATA_LLAMA_DIR "/gpt2-117m-q6_k.gguf";
+    net::ip::port_type port = 7331; // Default port
+
+    // --- Read Port from Environment Variable (Fallback) ---
+    const char* port_env = std::getenv("PORT");
+    if (port_env) {
+        try {
+            port = std::stoi(port_env);
+        } catch (const std::invalid_argument& e) {
+            JALOG(Error, "Warning: Invalid PORT environment variable '", port_env, "'. Using default port ", port, ".");
+        } catch (const std::out_of_range& e) {
+            JALOG(Error, "Warning: PORT environment variable '", port_env, "' is out of range. Using default port ", port, ".");
+        }
     }
-    else if (argc == 2) {
-        modelGguf = argv[1];
+
+    // Parse `--port` argument (popping it out if found)
+    std::vector<std::string> args(argv + 1, argv + argc);
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] == "--port") {
+            if (i + 1 < args.size()) {
+                try {
+                    port = std::stoi(args[i + 1]);
+                    // Erase the flag and its value so the positional argument logic still works
+                    args.erase(args.begin() + i, args.begin() + i + 2);
+                    --i; // Decrement i to re-evaluate the new element at the current position
+                } catch (const std::invalid_argument& e) {
+                    JALOG(Error, "Error: Invalid argument for --port. Please provide a valid number.");
+                    return 1;
+                } catch (const std::out_of_range& e) {
+                    JALOG(Error, "Error: Port number is out of the valid range.");
+                    return 1;
+                }
+            } else {
+                JALOG(Error, "Error: --port flag requires an argument.");
+                return 1;
+            }
+        }
     }
-    else {
-        std::cerr << "Usage: " << argv[0] << " [model.gguf]" << std::endl;
+
+    // Handle positional argument for model path
+    if (args.size() == 1) {
+        modelGguf = args[0];
+    } else if (args.size() > 1) {
+        std::cerr << "Usage: " << argv[0] << " [--port <port>] [model.gguf]" << std::endl;
         return 1;
     }
 
     JALOG(Info, "Loading ", modelGguf);
+    JALOG(Info, "Listening on port ", port);
 
     Server server(modelGguf);
 
@@ -394,5 +431,5 @@ int main(int argc, char* argv[]) {
 
     bstl::thread_runner runner(ioctx, 4);
 
-    net::co_spawn(ioctx, server.listen(), net::detached);
+    net::co_spawn(ioctx, server.listen(port), net::detached);
 }
